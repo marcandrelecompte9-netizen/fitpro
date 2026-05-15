@@ -18990,7 +18990,9 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                         bar.style.width = bar.dataset.pct + '%';
                     }, i * 60);
                 });
-            }, 100);
+                    // Re-append adventure container after RPG HTML rendering wipes it
+            setTimeout(() => { try { _appendAdventureContainer(); } catch(e) {} }, 50);
+        }, 100);
         }, 30)); // fin setTimeout/requestAnimationFrame skeleton
 
         // ── Append adventure container after renderGameTab ────────────
