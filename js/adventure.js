@@ -511,59 +511,390 @@ function initAdventureSystem() { /* Adventure is separate from RPG */ }
 // ═══════════════════════════════════════════════════════════════════════
 function showRPGEquipmentModal(defaultTab) {
     document.getElementById('rpgEquipModal')?.remove();
+
     const adventureOn = getAdventureEnabled();
-    const modal = document.createElement('div');
-    modal.id = 'rpgEquipModal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.92);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+    let selectedInvId = null;   // currently selected inventory item id
+    let activeSection = defaultTab === 'inventory' ? 'inventory' : 'equip';
 
-    // Tab state
-    let activeTab = defaultTab === 'inventory' ? 'inventory' : 'equipment';
+    // ── helpers ──────────────────────────────────────────────────────
+    function slotBox(slotId, eqItems, eq, size) {
+        const s = size || 44;
+        const item = eqItems[slotId];
+        const invId = eq[slotId];
+        const slotInfo = SLOTS[slotId];
+        if (item) {
+            const r = getRarityInfo(item.rarity);
+            return `<div onclick="window._rpgEqSelectSlot('${slotId}')" style="
+                width:${s}px;height:${s}px;border-radius:8px;cursor:pointer;flex-shrink:0;
+                background:${r.bg};border:2px solid ${r.color};
+                display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+                box-shadow:0 0 10px ${r.glow};position:relative;">
+                <span style="font-size:${s>42?'1.35em':'1.1em'};line-height:1;">${item.icon}</span>
+                <span style="font-size:0.38em;color:${r.color};font-weight:800;text-transform:uppercase;">${r.label}</span>
+            </div>`;
+        }
+        return `<div style="
+            width:${s}px;height:${s}px;border-radius:8px;flex-shrink:0;
+            background:rgba(6,182,212,0.04);border:1.5px dashed rgba(6,182,212,0.22);
+            display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+            <span style="font-size:${s>42?'1.1em':'0.9em'};opacity:0.25;">${slotInfo.icon}</span>
+            <span style="font-size:0.38em;color:rgba(6,182,212,0.2);font-weight:700;letter-spacing:0.5px;">${slotInfo.label.toUpperCase()}</span>
+        </div>`;
+    }
 
-    function buildContent() {
-        const inv = getInventory();
+    function statBar(icon, label, val, color) {
+        const pct = Math.min(100, Math.round(val / 80 * 100));
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+            <span style="font-size:0.75em;width:16px;text-align:center;">${icon}</span>
+            <span style="font-size:0.6em;color:#475569;font-weight:700;width:52px;">${label.toUpperCase()}</span>
+            <div style="flex:1;height:6px;background:rgba(255,255,255,0.05);border-radius:99px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;box-shadow:0 0 5px ${color}88;"></div>
+            </div>
+            <span style="font-size:0.68em;color:${color};font-weight:900;width:24px;text-align:right;">${val}</span>
+        </div>`;
+    }
+
+    function renderEquipSection() {
+        const eq = getEquipped();
         const eqItems = getEquippedItems();
-        const equippedCount = Object.values(eqItems).filter(Boolean).length;
-        const content = activeTab === 'equipment'
-            ? (adventureOn ? renderEquipmentPanel() : `<div style="text-align:center;padding:28px 16px;"><div style="font-size:2.5em;margin-bottom:10px;">⚔️</div><div style="color:#475569;font-size:0.85em;line-height:1.6;">Active le <strong style="color:#a855f7">Mode Chasseur</strong> dans l'onglet Jeu<br>pour débloquer le système d'équipement.</div></div>`)
-            : (adventureOn ? renderInventoryPanel() : `<div style="text-align:center;padding:28px 16px;"><div style="font-size:2.5em;margin-bottom:10px;">🎒</div><div style="color:#475569;font-size:0.85em;line-height:1.6;">Active le <strong style="color:#a855f7">Mode Chasseur</strong> dans l'onglet Jeu<br>pour débloquer l'inventaire.</div></div>`);
+        const st = getPlayerEquipStats();
+        const baseSt = { strength: 10, agility: 10, endurance: 10, vitality: 10 };
+        const gearScore = Object.values(eqItems).reduce((s, item) => {
+            if (!item) return s;
+            return s + Object.values(item.stats || {}).reduce((a, b) => a + b, 0);
+        }, 0);
+        const setBonuses = getSetBonuses();
+        const setBonusRows = (() => {
+            const seen = {};
+            return setBonuses.map(({set, bonus, count}) => {
+                const k = set.id + bonus.desc; if (seen[k]) return ''; seen[k] = true;
+                return `<div style="font-size:0.62em;color:#fbbf24;margin-top:3px;">${set.icon} <strong>${set.name}</strong> ${count}/4 — ${bonus.desc}</div>`;
+            }).join('');
+        })();
 
-        modal.innerHTML = `
-        <div style="width:100%;max-width:480px;background:#070b12;border-radius:22px 22px 0 0;border-top:1.5px solid rgba(6,182,212,0.3);border-left:1.5px solid rgba(6,182,212,0.15);border-right:1.5px solid rgba(6,182,212,0.15);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
-            <!-- Handle -->
-            <div style="width:36px;height:3px;background:#1a2535;border-radius:99px;margin:10px auto 0;flex-shrink:0;"></div>
+        const silhouette = `<svg viewBox="0 0 70 160" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:128px;filter:drop-shadow(0 0 14px rgba(6,182,212,0.7));">
+            <ellipse cx="35" cy="17" rx="11" ry="13" fill="rgba(6,182,212,0.12)" stroke="rgba(6,182,212,0.6)" stroke-width="1"/>
+            <rect x="30" y="29" width="10" height="7" rx="2" fill="rgba(6,182,212,0.1)" stroke="rgba(6,182,212,0.4)" stroke-width="0.7"/>
+            <path d="M16 37 Q14 62 16 84 L54 84 Q56 62 54 37 Q45 33 35 33 Q25 33 16 37Z" fill="rgba(6,182,212,0.08)" stroke="rgba(6,182,212,0.5)" stroke-width="0.9"/>
+            <path d="M16 39 Q7 46 6 66 Q5 78 9 87 L14 85 Q12 75 12 64 Q13 52 18 45Z" fill="rgba(6,182,212,0.06)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <path d="M54 39 Q63 46 64 66 Q65 78 61 87 L56 85 Q58 75 58 64 Q57 52 52 45Z" fill="rgba(6,182,212,0.06)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <ellipse cx="9" cy="91" rx="5" ry="6" fill="rgba(6,182,212,0.08)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <ellipse cx="61" cy="91" rx="5" ry="6" fill="rgba(6,182,212,0.08)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <path d="M20 84 Q17 110 16 133 L27 135 Q29 112 30 84Z" fill="rgba(6,182,212,0.06)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <path d="M50 84 Q53 110 54 133 L43 135 Q41 112 40 84Z" fill="rgba(6,182,212,0.06)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <ellipse cx="21" cy="138" rx="8" ry="4" fill="rgba(6,182,212,0.08)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <ellipse cx="49" cy="138" rx="8" ry="4" fill="rgba(6,182,212,0.08)" stroke="rgba(6,182,212,0.3)" stroke-width="0.7"/>
+            <line x1="35" y1="33" x2="35" y2="84" stroke="rgba(6,182,212,0.15)" stroke-width="0.5" stroke-dasharray="2,3"/>
+        </svg>`;
 
-            <!-- Header + tabs -->
-            <div style="padding:12px 16px 0;flex-shrink:0;">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                    <div style="font-size:0.6em;color:rgba(6,182,212,0.6);font-weight:900;text-transform:uppercase;letter-spacing:3px;">◈ System Equipment ◈</div>
-                    <button onclick="document.getElementById('rpgEquipModal').remove()" style="width:28px;height:28px;border-radius:50%;background:#0d1520;border:1px solid #1a2535;color:#475569;font-size:0.9em;cursor:pointer;">✕</button>
+        return `
+        <!-- ═══ LAYOUT PRINCIPAL ═══ -->
+        <div style="display:flex;gap:10px;">
+
+            <!-- GAUCHE : personnage + slots -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;">
+                <div style="font-size:0.52em;color:rgba(6,182,212,0.45);font-weight:700;text-transform:uppercase;letter-spacing:2px;">Personnage</div>
+
+                <!-- Ligne : TÊTE -->
+                <div style="display:flex;justify-content:center;">${slotBox('head', eqItems, eq, 44)}</div>
+
+                <!-- Ligne : ARME + silhouette + TORSE -->
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        ${slotBox('weapon', eqItems, eq, 42)}
+                        ${slotBox('hands', eqItems, eq, 42)}
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                        ${silhouette}
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        ${slotBox('chest', eqItems, eq, 42)}
+                        ${slotBox('legs', eqItems, eq, 42)}
+                    </div>
                 </div>
-                <!-- Tabs -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                    <button id="rpgModalTabEquip" onclick="window._rpgModalSwitchTab('equipment')" style="padding:9px;border-radius:10px;border:none;cursor:pointer;font-weight:700;font-size:0.8em;transition:all 0.2s;background:${activeTab==='equipment'?'linear-gradient(135deg,rgba(6,182,212,0.2),rgba(6,182,212,0.1));color:rgba(6,182,212,0.9);border:1px solid rgba(6,182,212,0.35)':'#0d1520;color:#334155;border:1px solid #1a2535'};">
-                        ⚔️ Équipement
-                    </button>
-                    <button id="rpgModalTabInv" onclick="window._rpgModalSwitchTab('inventory')" style="padding:9px;border-radius:10px;border:none;cursor:pointer;font-weight:700;font-size:0.8em;transition:all 0.2s;background:${activeTab==='inventory'?'linear-gradient(135deg,rgba(168,85,247,0.2),rgba(168,85,247,0.1));color:rgba(168,85,247,0.9);border:1px solid rgba(168,85,247,0.35)':'#0d1520;color:#334155;border:1px solid #1a2535'};">
-                        🎒 Inventaire (${inv.length})
-                    </button>
+
+                <!-- Ligne : PIEDS + ACCESSOIRE -->
+                <div style="display:flex;gap:6px;">
+                    ${slotBox('feet', eqItems, eq, 42)}
+                    ${slotBox('accessory', eqItems, eq, 42)}
                 </div>
+
+                <div style="font-size:0.52em;color:rgba(6,182,212,0.35);font-weight:700;text-transform:uppercase;letter-spacing:2px;">Chasseur</div>
             </div>
 
-            <!-- Scrollable content -->
-            <div style="flex:1;overflow-y:auto;padding:12px 16px 28px;-webkit-overflow-scrolling:touch;">
-                ${content}
+            <!-- DROITE : stats + détail item sélectionné -->
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+
+                <!-- Titre section stats -->
+                <div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);border-radius:10px;padding:10px 12px;">
+                    <div style="font-size:0.52em;color:rgba(6,182,212,0.5);font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">◈ Statistiques</div>
+                    ${statBar('⚔️','Attaque', baseSt.strength + st.strength, '#ef4444')}
+                    ${statBar('🛡️','Défense', baseSt.vitality + st.vitality, '#3b82f6')}
+                    ${statBar('⚡','Agilité', baseSt.agility + st.agility, '#f59e0b')}
+                    ${statBar('💚','Endurance', baseSt.endurance + st.endurance, '#22c55e')}
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid rgba(6,182,212,0.1);">
+                        <span style="font-size:0.55em;color:rgba(245,158,11,0.7);font-weight:700;text-transform:uppercase;letter-spacing:1.5px;">Gear Score</span>
+                        <span style="font-size:0.9em;font-weight:900;color:#fbbf24;">${gearScore}</span>
+                    </div>
+                    ${setBonusRows ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(245,158,11,0.15);">${setBonusRows}</div>` : ''}
+                </div>
+
+                <!-- Détail item sélectionné -->
+                <div id="rpgEqItemDetail" style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:10px 12px;flex:1;">
+                    <div style="font-size:0.52em;color:rgba(168,85,247,0.5);font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">◈ Détails de l'objet</div>
+                    <div style="text-align:center;padding:10px 0;">
+                        <div style="font-size:1.8em;opacity:0.2;">🔍</div>
+                        <div style="font-size:0.65em;color:#1e293b;margin-top:4px;">Sélectionne un slot<br>ou un item</div>
+                    </div>
+                </div>
             </div>
         </div>`;
+    }
 
-        // Tab switch handler
-        window._rpgModalSwitchTab = function(tab) {
-            activeTab = tab;
-            buildContent();
+    function renderInvSection() {
+        const inv = getInventory();
+        const eq = getEquipped();
+        const eqIds = new Set(Object.values(eq).filter(Boolean));
+        const daily = getDailyDrops();
+
+        if (!inv.length) return `
+            <div style="text-align:center;padding:32px 16px;">
+                <div style="font-size:2.5em;margin-bottom:8px;opacity:0.3;">📦</div>
+                <div style="font-size:0.8em;font-weight:700;color:#1e293b;">Inventaire vide</div>
+                <div style="font-size:0.7em;color:#0f172a;margin-top:4px;">Complète une séance pour obtenir ton premier item</div>
+                <div style="margin-top:8px;font-size:0.68em;color:${daily.count < MAX_DROPS_PER_DAY ? '#7c3aed' : '#1e293b'};">
+                    ${daily.count < MAX_DROPS_PER_DAY ? `${MAX_DROPS_PER_DAY - daily.count} drop(s) dispo aujourd'hui 🎲` : '⛔ Max drops atteint'}
+                </div>
+            </div>`;
+
+        const order = ['legendary','epic','rare','common'];
+        const grouped = {}; order.forEach(r => { grouped[r] = []; });
+        inv.forEach(entry => { const item = getItemById(entry.itemId); if (item) grouped[item.rarity]?.push({entry, item}); });
+
+        return `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="font-size:0.55em;color:#334155;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;">🎒 Inventaire (${inv.length} items)</div>
+            <div style="font-size:0.62em;color:${daily.count < MAX_DROPS_PER_DAY ? '#7c3aed' : '#334155'};font-weight:700;">${daily.count}/${MAX_DROPS_PER_DAY} drops/jour</div>
+        </div>
+        ${order.map(rid => {
+            const items = grouped[rid]; if (!items.length) return '';
+            const r = getRarityInfo(rid);
+            return `<div style="margin-bottom:12px;">
+                <div style="font-size:0.55em;color:${r.color};font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;padding:2px 8px;background:${r.bg};border-radius:5px;display:inline-block;border:1px solid ${r.color}30;">Rang ${r.label} · ${r.labelFull} (${items.length})</div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+                    ${items.map(({entry, item}) => {
+                        const isEq = eqIds.has(entry.id);
+                        const r2 = getRarityInfo(item.rarity);
+                        return `<div onclick="window._rpgInvSelectItem('${item.id}',${entry.id})" style="
+                            background:${r2.bg};border:1.5px solid ${isEq ? r2.color : r2.color+'28'};
+                            border-radius:10px;padding:8px 5px;cursor:pointer;text-align:center;
+                            box-shadow:${isEq ? `0 0 8px ${r2.glow}` : 'none'};position:relative;">
+                            ${isEq ? `<div style="position:absolute;top:2px;right:3px;font-size:0.42em;color:${r2.color};font-weight:900;">ON</div>` : ''}
+                            <div style="font-size:1.6em;margin-bottom:2px;">${item.icon}</div>
+                            <div style="font-size:0.5em;font-weight:700;color:${r2.color};line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${item.name}</div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+        }).join('')}`;
+    }
+
+    function refreshItemDetail(itemId, context, invId) {
+        const detail = document.getElementById('rpgEqItemDetail');
+        if (!detail) return;
+        if (!itemId) {
+            detail.innerHTML = `<div style="font-size:0.52em;color:rgba(168,85,247,0.5);font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;">◈ Détails de l'objet</div><div style="text-align:center;padding:10px 0;"><div style="font-size:1.8em;opacity:0.2;">🔍</div><div style="font-size:0.65em;color:#1e293b;margin-top:4px;">Sélectionne un slot<br>ou un item</div></div>`;
+            return;
+        }
+        const item = getItemById(itemId);
+        if (!item) return;
+        const r = getRarityInfo(item.rarity);
+        const eq = getEquipped();
+        const isEq = Object.values(eq).includes(invId);
+        const set = item.set ? getSetById(item.set) : null;
+        detail.innerHTML = `
+            <div style="font-size:0.52em;color:rgba(168,85,247,0.5);font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">◈ Détails de l'objet</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:${r.bg};border:1.5px solid ${r.color}55;display:flex;align-items:center;justify-content:center;font-size:1.3em;box-shadow:0 0 10px ${r.glow};">${item.icon}</div>
+                <div>
+                    <div style="font-size:0.78em;font-weight:900;color:white;line-height:1.2;">${item.name}</div>
+                    <span style="font-size:0.55em;font-weight:800;padding:1px 6px;border-radius:99px;background:${r.bg};color:${r.color};border:1px solid ${r.color}38;">RANG ${r.label} · ${r.labelFull}</span>
+                </div>
+            </div>
+            <div style="font-size:0.62em;color:#334155;margin-bottom:8px;line-height:1.5;">${item.description}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;">
+                ${[['⚔️','Force','strength','#ef4444'],['⚡','Agilité','agility','#f59e0b'],['💚','Endurance','endurance','#22c55e'],['💙','Vitalité','vitality','#3b82f6']].map(([icon,label,key,c])=>`
+                <div style="display:flex;align-items:center;gap:4px;background:rgba(0,0,0,0.3);padding:4px 6px;border-radius:7px;border:1px solid #1a2535;">
+                    <span style="font-size:0.7em;">${icon}</span>
+                    <span style="font-size:0.58em;color:#334155;flex:1;">${label}</span>
+                    <span style="font-size:0.72em;font-weight:800;color:${c};">+${item.stats[key]||0}</span>
+                </div>`).join('')}
+            </div>
+            ${set ? `<div style="font-size:0.58em;color:#f59e0b;margin-bottom:8px;">${set.icon} Set : <strong>${set.name}</strong></div>` : ''}
+            ${context === 'inventory' && invId != null ? `
+            <div style="display:flex;gap:6px;margin-top:4px;">
+                ${isEq
+                    ? `<button onclick="unequipSlot('${item.slot}');window._rpgRefreshEquipView();document.getElementById('rpgEqItemDetail') && window._rpgRefreshDetail(null,null,null);" style="flex:1;padding:8px;border-radius:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171;font-weight:700;cursor:pointer;font-size:0.72em;">✕ Déséquiper</button>`
+                    : `<button onclick="equipItem(${invId});window._rpgRefreshEquipView();window._rpgRefreshDetail('${itemId}','inventory',${invId});" style="flex:1;padding:8px;border-radius:10px;background:linear-gradient(135deg,${r.color},${r.color}aa);border:none;color:white;font-weight:800;cursor:pointer;font-size:0.72em;box-shadow:0 2px 10px ${r.glow};">⚔️ Équiper</button>`
+                }
+            </div>` : ''}`;
+        selectedInvId = invId;
+    }
+
+    // ── Build the full modal ──────────────────────────────────────────
+    const modal = document.createElement('div');
+    modal.id = 'rpgEquipModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.93);display:flex;align-items:flex-end;justify-content:center;';
+
+    function buildModal() {
+        const inv = getInventory();
+        modal.innerHTML = `
+        <div style="
+            width:100%;max-width:480px;
+            background:linear-gradient(160deg,#030810,#060c18,#030810);
+            border-radius:22px 22px 0 0;
+            border-top:2px solid rgba(6,182,212,0.5);
+            border-left:1.5px solid rgba(6,182,212,0.2);
+            border-right:1.5px solid rgba(6,182,212,0.2);
+            max-height:92vh;display:flex;flex-direction:column;overflow:hidden;
+            box-shadow:0 -8px 50px rgba(6,182,212,0.12);
+            position:relative;
+        ">
+            <!-- Corner HUD accents -->
+            <div style="position:absolute;top:0;left:0;width:18px;height:18px;border-top:2px solid rgba(6,182,212,0.8);border-left:2px solid rgba(6,182,212,0.8);border-radius:2px 0 0 0;z-index:2;"></div>
+            <div style="position:absolute;top:0;right:0;width:18px;height:18px;border-top:2px solid rgba(6,182,212,0.8);border-right:2px solid rgba(6,182,212,0.8);border-radius:0 2px 0 0;z-index:2;"></div>
+
+            <!-- Handle -->
+            <div style="width:36px;height:3px;background:#0d1a2a;border-radius:99px;margin:10px auto 0;flex-shrink:0;"></div>
+
+            <!-- Header -->
+            <div style="padding:10px 18px 0;flex-shrink:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:0.58em;color:rgba(6,182,212,0.5);font-weight:900;text-transform:uppercase;letter-spacing:3px;margin-bottom:2px;">◈ System Equipment ◈</div>
+                        <div style="font-size:0.82em;font-weight:900;color:white;">Inventaire d'équipement</div>
+                    </div>
+                    <button onclick="document.getElementById('rpgEquipModal').remove()" style="width:30px;height:30px;border-radius:50%;background:#0a1525;border:1px solid rgba(6,182,212,0.2);color:#475569;font-size:0.95em;cursor:pointer;">✕</button>
+                </div>
+                <!-- Tabs -->
+                <div style="display:flex;gap:6px;margin-bottom:10px;">
+                    <button id="rpgTabEquip" onclick="window._rpgSwitchSection('equip')" style="
+                        flex:1;padding:8px;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.75em;
+                        background:${activeSection==='equip'?'linear-gradient(135deg,rgba(6,182,212,0.2),rgba(6,182,212,0.08))':'#0a1525'};
+                        color:${activeSection==='equip'?'rgba(6,182,212,0.95)':'#334155'};
+                        border:1px solid ${activeSection==='equip'?'rgba(6,182,212,0.4)':'rgba(255,255,255,0.05)'};
+                        box-shadow:${activeSection==='equip'?'0 0 12px rgba(6,182,212,0.15)':'none'};
+                    ">⚔️ Équipement</button>
+                    <button id="rpgTabInv" onclick="window._rpgSwitchSection('inventory')" style="
+                        flex:1;padding:8px;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.75em;
+                        background:${activeSection==='inventory'?'linear-gradient(135deg,rgba(168,85,247,0.2),rgba(168,85,247,0.08))':'#0a1525'};
+                        color:${activeSection==='inventory'?'rgba(168,85,247,0.95)':'#334155'};
+                        border:1px solid ${activeSection==='inventory'?'rgba(168,85,247,0.4)':'rgba(255,255,255,0.05)'};
+                        box-shadow:${activeSection==='inventory'?'0 0 12px rgba(168,85,247,0.15)':'none'};
+                    ">🎒 Inventaire (${inv.length})</button>
+                </div>
+            </div>
+
+            <!-- Scrollable body -->
+            <div id="rpgEquipBody" style="flex:1;overflow-y:auto;padding:0 16px 28px;-webkit-overflow-scrolling:touch;">
+                ${!adventureOn
+                    ? `<div style="text-align:center;padding:32px 16px;"><div style="font-size:3em;margin-bottom:12px;">⚔️</div><div style="font-size:0.85em;color:#475569;line-height:1.7;">Active le <strong style="color:#a855f7">Mode Chasseur</strong><br>dans l'onglet Jeu pour débloquer<br>le système d'équipement.</div></div>`
+                    : activeSection === 'equip' ? renderEquipSection() : renderInvSection()
+                }
+            </div>
+        </div>
+        <style>
+            #rpgEquipModal button:active { transform: scale(0.97); }
+        </style>`;
+
+        // Global handlers
+        window._rpgSwitchSection = function(s) {
+            activeSection = s;
+            buildModal();
+        };
+        window._rpgInvSelectItem = function(itemId, invId) {
+            selectedInvId = invId;
+            // Switch to equip tab to show detail, or show detail panel in inventory
+            // Show detail inline via a bottom sheet
+            refreshItemDetailBottomSheet(itemId, 'inventory', invId);
+        };
+        window._rpgEqSelectSlot = function(slotId) {
+            const eq = getEquipped();
+            const eqItems = getEquippedItems();
+            const item = eqItems[slotId];
+            if (item) refreshItemDetailBottomSheet(item.id, 'equipped', eq[slotId]);
+        };
+        window._rpgRefreshEquipView = function() {
+            buildModal();
+        };
+        window._rpgRefreshDetail = function(itemId, ctx, invId) {
+            refreshItemDetail(itemId, ctx, invId);
         };
     }
 
-    document.body.appendChild(modal);
-    buildContent();
+    function refreshItemDetailBottomSheet(itemId, context, invId) {
+        document.getElementById('rpgItemDetailSheet')?.remove();
+        const item = getItemById(itemId);
+        if (!item) return;
+        const r = getRarityInfo(item.rarity);
+        const eq = getEquipped();
+        const isEq = Object.values(eq).includes(invId);
+        const set = item.set ? getSetById(item.set) : null;
 
+        const sheet = document.createElement('div');
+        sheet.id = 'rpgItemDetailSheet';
+        sheet.style.cssText = `position:fixed;inset:0;z-index:10200;background:rgba(0,0,0,0.7);display:flex;align-items:flex-end;justify-content:center;`;
+        sheet.innerHTML = `
+        <div style="
+            width:100%;max-width:480px;
+            background:linear-gradient(160deg,#060c18,#080d1e);
+            border-radius:20px 20px 0 0;
+            border-top:2px solid ${r.color}80;
+            padding:0 18px 32px;
+            box-shadow:0 -6px 40px ${r.glow};
+            animation:slideUp 0.25s cubic-bezier(0.34,1.2,0.64,1);
+        ">
+            <div style="width:36px;height:3px;background:#1a2535;border-radius:99px;margin:10px auto 14px;"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <div style="width:52px;height:52px;border-radius:14px;flex-shrink:0;background:${r.bg};border:2px solid ${r.color}55;display:flex;align-items:center;justify-content:center;font-size:1.9em;box-shadow:0 0 18px ${r.glow};">${item.icon}</div>
+                <div style="flex:1;">
+                    <div style="font-size:1em;font-weight:900;color:white;margin-bottom:4px;">${item.name}</div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                        <span style="font-size:0.6em;font-weight:800;padding:2px 8px;border-radius:99px;background:${r.bg};color:${r.color};border:1px solid ${r.color}40;">RANG ${r.label} · ${r.labelFull}</span>
+                        <span style="font-size:0.6em;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.04);color:#475569;border:1px solid #1a2535;">${SLOTS[item.slot]?.label}</span>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('rpgItemDetailSheet').remove()" style="width:30px;height:30px;border-radius:50%;background:#0a1525;border:1px solid #1a2535;color:#475569;cursor:pointer;font-size:0.9em;flex-shrink:0;">✕</button>
+            </div>
+            <div style="font-size:0.78em;color:#475569;margin-bottom:12px;line-height:1.6;">${item.description}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:12px;">
+                ${[['⚔️','Force','strength','#ef4444'],['⚡','Agilité','agility','#f59e0b'],['💚','Endurance','endurance','#22c55e'],['💙','Vitalité','vitality','#3b82f6']].map(([icon,label,key,c])=>`
+                <div style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.4);padding:7px 9px;border-radius:9px;border:1px solid #1a2535;">
+                    <span style="font-size:0.85em;">${icon}</span>
+                    <span style="font-size:0.68em;color:#1e293b;flex:1;">${label}</span>
+                    <span style="font-size:0.88em;font-weight:900;color:${c};">+${item.stats[key]||0}</span>
+                </div>`).join('')}
+            </div>
+            ${set ? `<div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:10px;padding:9px 12px;margin-bottom:12px;">
+                <div style="font-size:0.62em;color:#f59e0b;font-weight:700;">${set.icon} Set : <strong>${set.name}</strong></div>
+                <div style="font-size:0.65em;color:#334155;margin-top:2px;">${set.description}</div>
+            </div>` : ''}
+            <div style="font-size:0.7em;color:#1e293b;font-style:italic;text-align:center;margin-bottom:14px;line-height:1.5;">${item.lore}</div>
+            <div style="display:flex;gap:8px;">
+                ${context === 'inventory' && invId != null
+                    ? (isEq
+                        ? `<button onclick="unequipSlot('${item.slot}');window._rpgRefreshEquipView();document.getElementById('rpgItemDetailSheet').remove();" style="flex:1;padding:13px;border-radius:13px;background:rgba(239,68,68,0.09);border:1px solid rgba(239,68,68,0.2);color:#f87171;font-weight:700;cursor:pointer;font-size:0.83em;">✕ Déséquiper</button>`
+                        : `<button onclick="equipItem(${invId});window._rpgRefreshEquipView();document.getElementById('rpgItemDetailSheet').remove();" style="flex:1;padding:13px;border-radius:13px;background:linear-gradient(135deg,${r.color},${r.color}bb);border:none;color:white;font-weight:800;cursor:pointer;font-size:0.85em;box-shadow:0 4px 16px ${r.glow};">⚔️ Équiper</button>`)
+                    : `<button onclick="document.getElementById('rpgItemDetailSheet').remove();" style="flex:1;padding:13px;border-radius:13px;background:#0a1525;border:1px solid #1a2535;color:#475569;font-weight:700;cursor:pointer;font-size:0.82em;">Fermer</button>`
+                }
+            </div>
+        </div>
+        <style>@keyframes slideUp{from{transform:translateY(50px);opacity:0}to{transform:translateY(0);opacity:1}}</style>`;
+        sheet.addEventListener('click', e => { if (e.target === sheet) sheet.remove(); });
+        document.body.appendChild(sheet);
+    }
+
+    document.body.appendChild(modal);
+    buildModal();
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
