@@ -18664,6 +18664,48 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 </div>`;
             tab.appendChild(cardProfile);
 
+            // ── BOUTON ACCÈS RAPIDE ÉQUIPEMENT RPG ───────────────────
+            const cardEquipShortcut = document.createElement('div');
+            cardEquipShortcut.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;';
+            const eqItems = typeof getEquippedItems === 'function' ? getEquippedItems() : {};
+            const equippedCount = Object.values(eqItems).filter(Boolean).length;
+            const inv = typeof getInventory === 'function' ? getInventory() : [];
+            const gearScore = typeof getPlayerEquipStats === 'function' ? (() => {
+                const st = getPlayerEquipStats();
+                return (st.strength||0)+(st.agility||0)+(st.endurance||0)+(st.vitality||0);
+            })() : 0;
+            const adventureOn = typeof getAdventureEnabled === 'function' ? getAdventureEnabled() : false;
+            cardEquipShortcut.innerHTML = `
+                <button onclick="showRPGEquipmentModal()" style="
+                    display:flex;align-items:center;gap:10px;padding:13px 14px;
+                    background:linear-gradient(135deg,#020b18,#030e1f);
+                    border:1.5px solid rgba(6,182,212,${adventureOn?'0.45':'0.18'});
+                    border-radius:14px;cursor:pointer;text-align:left;touch-action:manipulation;
+                    box-shadow:${adventureOn?'0 0 18px rgba(6,182,212,0.12)':'none'};
+                ">
+                    <div style="font-size:1.5em;flex-shrink:0;">⚔️</div>
+                    <div style="min-width:0;">
+                        <div style="font-size:0.62em;color:rgba(6,182,212,0.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Équipement</div>
+                        <div style="font-weight:800;color:${adventureOn?'#e2e8f0':'#334155'};font-size:0.85em;">${equippedCount}/7 slots</div>
+                        <div style="font-size:0.62em;color:#f59e0b;margin-top:1px;">${adventureOn?'GS '+gearScore:'Mode aventure off'}</div>
+                    </div>
+                </button>
+                <button onclick="showRPGEquipmentModal('inventory')" style="
+                    display:flex;align-items:center;gap:10px;padding:13px 14px;
+                    background:linear-gradient(135deg,#0a0014,#00081a);
+                    border:1.5px solid rgba(168,85,247,${adventureOn?'0.4':'0.15'});
+                    border-radius:14px;cursor:pointer;text-align:left;touch-action:manipulation;
+                    box-shadow:${adventureOn?'0 0 18px rgba(168,85,247,0.10)':'none'};
+                ">
+                    <div style="font-size:1.5em;flex-shrink:0;">🎒</div>
+                    <div style="min-width:0;">
+                        <div style="font-size:0.62em;color:rgba(168,85,247,0.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Inventaire</div>
+                        <div style="font-weight:800;color:${adventureOn?'#e2e8f0':'#334155'};font-size:0.85em;">${inv.length} item${inv.length!==1?'s':''}</div>
+                        <div style="font-size:0.62em;color:rgba(168,85,247,${adventureOn?'0.7':'0.3'});margin-top:1px;">Tap pour gérer</div>
+                    </div>
+                </button>`;
+            tab.appendChild(cardEquipShortcut);
+
             // ── 2. RANG ──────────────────────────────────────────────
             const cardRank = document.createElement('div');
             cardRank.className = 'card';

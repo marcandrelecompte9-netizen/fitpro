@@ -505,3 +505,65 @@ function showDropModal(item, rarityInfo) {
 }
 
 function initAdventureSystem() { /* Adventure is separate from RPG */ }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL ÉQUIPEMENT RPG — Accessible depuis l'onglet Jeu
+// ═══════════════════════════════════════════════════════════════════════
+function showRPGEquipmentModal(defaultTab) {
+    document.getElementById('rpgEquipModal')?.remove();
+    const adventureOn = getAdventureEnabled();
+    const modal = document.createElement('div');
+    modal.id = 'rpgEquipModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.92);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+
+    // Tab state
+    let activeTab = defaultTab === 'inventory' ? 'inventory' : 'equipment';
+
+    function buildContent() {
+        const inv = getInventory();
+        const eqItems = getEquippedItems();
+        const equippedCount = Object.values(eqItems).filter(Boolean).length;
+        const content = activeTab === 'equipment'
+            ? (adventureOn ? renderEquipmentPanel() : `<div style="text-align:center;padding:28px 16px;"><div style="font-size:2.5em;margin-bottom:10px;">⚔️</div><div style="color:#475569;font-size:0.85em;line-height:1.6;">Active le <strong style="color:#a855f7">Mode Chasseur</strong> dans l'onglet Jeu<br>pour débloquer le système d'équipement.</div></div>`)
+            : (adventureOn ? renderInventoryPanel() : `<div style="text-align:center;padding:28px 16px;"><div style="font-size:2.5em;margin-bottom:10px;">🎒</div><div style="color:#475569;font-size:0.85em;line-height:1.6;">Active le <strong style="color:#a855f7">Mode Chasseur</strong> dans l'onglet Jeu<br>pour débloquer l'inventaire.</div></div>`);
+
+        modal.innerHTML = `
+        <div style="width:100%;max-width:480px;background:#070b12;border-radius:22px 22px 0 0;border-top:1.5px solid rgba(6,182,212,0.3);border-left:1.5px solid rgba(6,182,212,0.15);border-right:1.5px solid rgba(6,182,212,0.15);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+            <!-- Handle -->
+            <div style="width:36px;height:3px;background:#1a2535;border-radius:99px;margin:10px auto 0;flex-shrink:0;"></div>
+
+            <!-- Header + tabs -->
+            <div style="padding:12px 16px 0;flex-shrink:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <div style="font-size:0.6em;color:rgba(6,182,212,0.6);font-weight:900;text-transform:uppercase;letter-spacing:3px;">◈ System Equipment ◈</div>
+                    <button onclick="document.getElementById('rpgEquipModal').remove()" style="width:28px;height:28px;border-radius:50%;background:#0d1520;border:1px solid #1a2535;color:#475569;font-size:0.9em;cursor:pointer;">✕</button>
+                </div>
+                <!-- Tabs -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <button id="rpgModalTabEquip" onclick="window._rpgModalSwitchTab('equipment')" style="padding:9px;border-radius:10px;border:none;cursor:pointer;font-weight:700;font-size:0.8em;transition:all 0.2s;background:${activeTab==='equipment'?'linear-gradient(135deg,rgba(6,182,212,0.2),rgba(6,182,212,0.1));color:rgba(6,182,212,0.9);border:1px solid rgba(6,182,212,0.35)':'#0d1520;color:#334155;border:1px solid #1a2535'};">
+                        ⚔️ Équipement
+                    </button>
+                    <button id="rpgModalTabInv" onclick="window._rpgModalSwitchTab('inventory')" style="padding:9px;border-radius:10px;border:none;cursor:pointer;font-weight:700;font-size:0.8em;transition:all 0.2s;background:${activeTab==='inventory'?'linear-gradient(135deg,rgba(168,85,247,0.2),rgba(168,85,247,0.1));color:rgba(168,85,247,0.9);border:1px solid rgba(168,85,247,0.35)':'#0d1520;color:#334155;border:1px solid #1a2535'};">
+                        🎒 Inventaire (${inv.length})
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scrollable content -->
+            <div style="flex:1;overflow-y:auto;padding:12px 16px 28px;-webkit-overflow-scrolling:touch;">
+                ${content}
+            </div>
+        </div>`;
+
+        // Tab switch handler
+        window._rpgModalSwitchTab = function(tab) {
+            activeTab = tab;
+            buildContent();
+        };
+    }
+
+    document.body.appendChild(modal);
+    buildContent();
+
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
