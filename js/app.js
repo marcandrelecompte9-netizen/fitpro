@@ -18215,7 +18215,23 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             }
             
             clearInterval(timerInterval);
-            
+
+            // 🎮 XP RPG pour mode timer — accordé même si l'utilisateur skip manuellement
+            if (rpgEnabled()) {
+                try {
+                    const _skipEx = currentWorkout?.exercises?.[currentExerciseIndex];
+                    if (_skipEx && !_skipEx.isRest && !_skipEx.isInfo) {
+                        const _isTimer = _skipEx.mode === 'timer' || (!_skipEx.mode && _skipEx.duration > 0);
+                        if (_isTimer) {
+                            // XP proportionnel au temps écoulé (min 30% de la durée totale)
+                            const _totalDur = _skipEx.duration || 30;
+                            const _elapsed = Math.max(_totalDur * 0.3, _totalDur - Math.max(0, timeRemaining));
+                            rpgGainXP(_skipEx._baseName || _skipEx.name, 0, 0, _elapsed);
+                        }
+                    }
+                } catch(e) {}
+            }
+
             // Check which type of workout is running
             if (currentSupersetWorkout) {
                 nextSupersetExercise();
@@ -18667,43 +18683,25 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             // ── BOUTON ACCÈS RAPIDE ÉQUIPEMENT RPG ───────────────────
             const cardEquipShortcut = document.createElement('div');
             cardEquipShortcut.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;';
-            const eqItems = typeof getEquippedItems === 'function' ? getEquippedItems() : {};
-            const equippedCount = Object.values(eqItems).filter(Boolean).length;
-            const inv = typeof getInventory === 'function' ? getInventory() : [];
-            const gearScore = typeof getPlayerEquipStats === 'function' ? (() => {
-                const st = getPlayerEquipStats();
-                return (st.strength||0)+(st.agility||0)+(st.endurance||0)+(st.vitality||0);
-            })() : 0;
-            const adventureOn = typeof getAdventureEnabled === 'function' ? getAdventureEnabled() : false;
-            cardEquipShortcut.innerHTML = `
-                <button onclick="showRPGEquipmentModal()" style="
-                    display:flex;align-items:center;gap:10px;padding:13px 14px;
-                    background:linear-gradient(135deg,#020b18,#030e1f);
-                    border:1.5px solid rgba(6,182,212,${adventureOn?'0.45':'0.18'});
-                    border-radius:14px;cursor:pointer;text-align:left;touch-action:manipulation;
-                    box-shadow:${adventureOn?'0 0 18px rgba(6,182,212,0.12)':'none'};
-                ">
-                    <div style="font-size:1.5em;flex-shrink:0;">⚔️</div>
-                    <div style="min-width:0;">
-                        <div style="font-size:0.62em;color:rgba(6,182,212,0.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Équipement</div>
-                        <div style="font-weight:800;color:${adventureOn?'#e2e8f0':'#334155'};font-size:0.85em;">${equippedCount}/7 slots</div>
-                        <div style="font-size:0.62em;color:#f59e0b;margin-top:1px;">${adventureOn?'GS '+gearScore:'Mode aventure off'}</div>
-                    </div>
-                </button>
-                <button onclick="showRPGEquipmentModal('inventory')" style="
-                    display:flex;align-items:center;gap:10px;padding:13px 14px;
-                    background:linear-gradient(135deg,#0a0014,#00081a);
-                    border:1.5px solid rgba(168,85,247,${adventureOn?'0.4':'0.15'});
-                    border-radius:14px;cursor:pointer;text-align:left;touch-action:manipulation;
-                    box-shadow:${adventureOn?'0 0 18px rgba(168,85,247,0.10)':'none'};
-                ">
-                    <div style="font-size:1.5em;flex-shrink:0;">🎒</div>
-                    <div style="min-width:0;">
-                        <div style="font-size:0.62em;color:rgba(168,85,247,0.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Inventaire</div>
-                        <div style="font-weight:800;color:${adventureOn?'#e2e8f0':'#334155'};font-size:0.85em;">${inv.length} item${inv.length!==1?'s':''}</div>
-                        <div style="font-size:0.62em;color:rgba(168,85,247,${adventureOn?'0.7':'0.3'});margin-top:1px;">Tap pour gérer</div>
-                    </div>
-                </button>`;
+
+            const _adv = typeof getAdventureEnabled === 'function' ? getAdventureEnabled() : false;
+            const _eqIt = typeof getEquippedItems === 'function' ? getEquippedItems() : {};
+            const _eqCount = Object.values(_eqIt).filter(Boolean).length;
+            const _inv = typeof getInventory === 'function' ? getInventory() : [];
+            const _gs = typeof getPlayerEquipStats === 'function' ? (() => { const s = getPlayerEquipStats(); return (s.strength||0)+(s.agility||0)+(s.endurance||0)+(s.vitality||0); })() : 0;
+
+            const btnEquip = document.createElement('button');
+            btnEquip.style.cssText = 'display:flex;align-items:center;gap:10px;padding:13px 14px;background:linear-gradient(135deg,#020b18,#030e1f);border:1.5px solid rgba(6,182,212,' + (_adv?'0.45':'0.18') + ');border-radius:14px;cursor:pointer;text-align:left;touch-action:manipulation;';
+            btnEquip.innerHTML = '<div style="font-size:1.5em;flex-shrink:0;">⚔️</div><div style="min-width:0;"><div style="font-size:0.62em;color:rgba(6,182,212,0.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Équipement</div><div style="font-weight:800;color:' + (_adv?'#e2e8f0':'#334155') + ';font-size:0.85em;">' + _eqCount + '/7 slots</div><div style="font-size:0.62em;color:#f59e0b;margin-top:1px;">' + (_adv?'GS '+_gs:'Mode aventure off') + '</div></div>';
+            btnEquip.addEventListener('click', function() { if (typeof showRPGEquipmentModal === 'function') showRPGEquipmentModal('equip'); else alert('showRPGEquipmentModal not found'); });
+
+            const btnInv = document.createElement('button');
+            btnInv.style.cssText = 'display:flex;align-items:center;gap:10px;padding:13px 14px;background:linear-gradient(135deg,#0a0014,#00081a);border:1.5px solid rgba(168,85,247,' + (_adv?'0.4':'0.15') + ');border-radius:14px;cursor:pointer;text-align:left;touch-action:manipulation;';
+            btnInv.innerHTML = '<div style="font-size:1.5em;flex-shrink:0;">🎒</div><div style="min-width:0;"><div style="font-size:0.62em;color:rgba(168,85,247,0.5);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Inventaire</div><div style="font-weight:800;color:' + (_adv?'#e2e8f0':'#334155') + ';font-size:0.85em;">' + _inv.length + ' item' + (_inv.length!==1?'s':'') + '</div><div style="font-size:0.62em;color:rgba(168,85,247,' + (_adv?'0.7':'0.3') + ');margin-top:1px;">Tap pour gérer</div></div>';
+            btnInv.addEventListener('click', function() { if (typeof showRPGEquipmentModal === 'function') showRPGEquipmentModal('inventory'); else alert('showRPGEquipmentModal not found'); });
+
+            cardEquipShortcut.appendChild(btnEquip);
+            cardEquipShortcut.appendChild(btnInv);
             tab.appendChild(cardEquipShortcut);
 
             // ── 2. RANG ──────────────────────────────────────────────
