@@ -10,21 +10,7 @@ const ADVENTURE_STORAGE = {
 };
 const MAX_DROPS_PER_DAY = 2;
 
-const RARITIES = {
-    common:    { id:'common',    label:'E', labelFull:'Commun',     color:'#94a3b8', bg:'rgba(148,163,184,0.10)', glow:'rgba(148,163,184,0.18)', dropRate:0.60 },
-    rare:      { id:'rare',      label:'C', labelFull:'Rare',       color:'#3b82f6', bg:'rgba(59,130,246,0.10)',  glow:'rgba(59,130,246,0.28)',  dropRate:0.28 },
-    epic:      { id:'epic',      label:'A', labelFull:'Épique',     color:'#a855f7', bg:'rgba(168,85,247,0.10)', glow:'rgba(168,85,247,0.38)', dropRate:0.10 },
-    legendary: { id:'legendary', label:'S', labelFull:'Légendaire', color:'#f59e0b', bg:'rgba(245,158,11,0.10)', glow:'rgba(245,158,11,0.45)', dropRate:0.02 },
-};
-const SLOTS = {
-    head:      { label:'Tête',       icon:'⛑️' },
-    chest:     { label:'Torse',      icon:'🛡️' },
-    hands:     { label:'Mains',      icon:'🥊' },
-    legs:      { label:'Jambes',     icon:'🦵' },
-    feet:      { label:'Pieds',      icon:'👟' },
-    weapon:    { label:'Arme',       icon:'⚔️' },
-    accessory: { label:'Accessoire', icon:'💍' },
-};
+// RARITIES et SLOTS sont définis dans data/items.js (chargé avant adventure.js)
 
 // ── PERSISTENCE ─────────────────────────────────────────────────────────
 function getAdventureEnabled() { return localStorage.getItem(ADVENTURE_STORAGE.enabled) === 'true'; }
