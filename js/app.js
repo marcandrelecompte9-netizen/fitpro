@@ -16248,25 +16248,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 const difficultyClass = `difficulty-${exercise.difficulty.toLowerCase().replace('é', 'e')}`;
                 const svgStart = getExerciseVisual(exercise.name, exercise.muscle, 'start');
                 const svgEnd = getExerciseVisual(exercise.name, exercise.muscle, 'end');
-                const _hasImg = typeof hasExerciseImage === 'function' && hasExerciseImage(exercise.name);
+                const _imgSrc = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exercise.name];
+                const _mediaHTML = _imgSrc
+                    ? '<div style="width:100%;height:100%;"><img src="' + _imgSrc + '" alt="' + exercise.name + '" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>'
+                    : '<div class="exercise-animation"><div class="exercise-svg-container">' + svgStart + '<div class="position-label position-start">Début</div></div><div class="arrow-indicator">→</div><div class="exercise-svg-container">' + svgEnd + '<div class="position-label position-end">Fin</div></div></div>';
                 
                 card.innerHTML = `
                     <div class="exercise-image">
-                        ${_hasImg ? `
-                        <div style="width:100%;height:100%;position:relative;">
-                            <img src="${EXERCISE_IMAGES[exercise.name]}" alt="${exercise.name}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy"/>
-                        </div>` : `
-                        <div class="exercise-animation">
-                            <div class="exercise-svg-container">
-                                ${svgStart}
-                                <div class="position-label position-start">Début</div>
-                            </div>
-                            <div class="arrow-indicator">→</div>
-                            <div class="exercise-svg-container">
-                                ${svgEnd}
-                                <div class="position-label position-end">Fin</div>
-                            </div>
-                        </div>`}
+                        ${_mediaHTML}
                         <!-- Favorite button (top-right) -->
                         <button class="favorite-btn" 
                                 onclick="toggleFavorite('${exercise.name.replace(/'/g, "\\'")}'); event.stopPropagation();"
@@ -16448,25 +16437,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const difficultyClass = `difficulty-${exercise.difficulty.toLowerCase().replace('é', 'e')}`;
             const svgStart = getExerciseVisual(exercise.name, exercise.muscle, 'start');
             const svgEnd = getExerciseVisual(exercise.name, exercise.muscle, 'end');
-            const _hasImg2 = typeof hasExerciseImage === 'function' && hasExerciseImage(exercise.name);
+            const _imgSrc2 = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exercise.name];
+            const _mediaHTML2 = _imgSrc2
+                ? '<div style="width:100%;height:100%;"><img src="' + _imgSrc2 + '" alt="' + exercise.name + '" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block;"/></div>'
+                : '<div class="exercise-animation"><div class="exercise-svg-container">' + svgStart + '<div class="position-label position-start">Début</div></div><div class="arrow-indicator">→</div><div class="exercise-svg-container">' + svgEnd + '<div class="position-label position-end">Fin</div></div></div>';
             
             document.getElementById('modalDifficulty').innerHTML = 
                 `<div class="exercise-image" style="margin: 15px 0; height: 340px; border-radius: 12px;">
-                    ${_hasImg2 ? `
-                    <div style="width:100%;height:100%;position:relative;">
-                        <img src="${EXERCISE_IMAGES[exercise.name]}" alt="${exercise.name}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block;" loading="lazy"/>
-                    </div>` : `
-                    <div class="exercise-animation">
-                        <div class="exercise-svg-container">
-                            ${svgStart}
-                            <div class="position-label position-start">Début</div>
-                        </div>
-                        <div class="arrow-indicator">→</div>
-                        <div class="exercise-svg-container">
-                            ${svgEnd}
-                            <div class="position-label position-end">Fin</div>
-                        </div>
-                    </div>`}
+                    ${_mediaHTML2}
                 </div>
                 <div class="difficulty-badge ${difficultyClass}" style="display: inline-block; margin: 10px 0;">${exercise.difficulty}</div>`;
             
@@ -17050,15 +17028,15 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             
             const svgStart = getExerciseVisual(exerciseName, muscleGuess, 'start');
             const svgEnd = getExerciseVisual(exerciseName, muscleGuess, 'end');
-            const _hasImg3 = typeof hasExerciseImage === 'function' && hasExerciseImage(exerciseName);
+            const _imgSrc3 = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exerciseName];
             
             const imagesDiv = document.createElement('div');
             imagesDiv.className = 'exercise-timer-images';
             imagesDiv.style.cssText = 'display: flex; gap: 20px; align-items: center; justify-content: center; margin: 20px auto; max-width: 700px; width: 100%;';
-            imagesDiv.innerHTML = _hasImg3 ? `
-                <div style="width:100%;max-width:500px;border-radius:14px;overflow:hidden;">
-                    <img src="${EXERCISE_IMAGES[exerciseName]}" alt="${exerciseName}" style="width:100%;display:block;border-radius:14px;" loading="lazy"/>
-                </div>` : `
+            if (_imgSrc3) {
+                imagesDiv.innerHTML = '<div style="width:100%;max-width:500px;border-radius:14px;overflow:hidden;"><img src="' + _imgSrc3 + '" alt="' + exerciseName + '" style="width:100%;display:block;border-radius:14px;"/></div>';
+            } else {
+                imagesDiv.innerHTML = `
                 <div style="flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0;">
                     <div style="width: 100%; max-width: 260px; aspect-ratio: 1; opacity: 1;">${svgStart}</div>
                     <span style="font-size: 0.9em; margin-top: 8px; opacity: 0.8; font-weight: 600; color: #4ade80;">▶ Début</span>
@@ -17067,9 +17045,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 <div style="flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0;">
                     <div style="width: 100%; max-width: 260px; aspect-ratio: 1; opacity: 1;">${svgEnd}</div>
                     <span style="font-size: 0.9em; margin-top: 8px; opacity: 0.8; font-weight: 600; color: #ef4444;">■ Fin</span>
-                </div>
-            `;
-            
+                </div>`;
+            }
             const exerciseNameElement = document.getElementById('exerciseName');
             exerciseNameElement.parentNode.insertBefore(imagesDiv, exerciseNameElement.nextSibling);
             
