@@ -701,11 +701,86 @@ function generic_muscle(muscle, phase) {
 // ── IMAGE MAP — exercices avec vraies images ─────────────────────────
 // Clé = nom exact de l'exercice, valeur = chemin du fichier image
 var EXERCISE_IMAGES = {
-  'Ab Wheel Knee Rollout': 'images/exercises/Ab_wheel_knee_rollout.png',
+  'Ab Wheel Knee Rollout':         'images/exercises/Ab_wheel_knee_rollout.webp',
+  'Ab Wheel Rollout':              'images/exercises/Ab_wheel_rollout.webp',
+  'Abduction machine (fessiers)':  'images/exercises/Abduction_machine__fessiers_.webp',
+  'Adduction machine (intérieur)': 'images/exercises/Adduction_machine__intérieur_.webp',
+  'Balancements jambe arrière':    'images/exercises/Balancements_jambe_arrière.webp',
+  'Ball back extension':           'images/exercises/Ball_back_extension.webp',
+  'Ball chest press':              'images/exercises/Ball_chest_press.webp',
+  'Ball crunch':                   'images/exercises/Ball_crunch.webp',
+  'Ball hamstring curl':           'images/exercises/Ball_Hamstring_curl.webp',
+  'Ball leg raise':                'images/exercises/Ball_leg_raise.webp',
+  'Ball pike':                     'images/exercises/Ball_Pike.webp',
+  'Ball Russian twist':            'images/exercises/Ball_Russian_twist.webp',
 };
 
 function hasExerciseImage(name) {
   return !!(name && EXERCISE_IMAGES[name]);
+}
+
+// ── LAZY LOADING avec IntersectionObserver ──────────────────────────
+// Les images ne sont téléchargées que lorsqu'elles entrent dans la vue
+// + placeholder pendant le chargement
+var LAZY_OBSERVER = null;
+
+function _initLazyObserver() {
+  if (LAZY_OBSERVER || typeof IntersectionObserver === 'undefined') return;
+  LAZY_OBSERVER = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (!entry.isIntersecting) return;
+      var img = entry.target;
+      var realSrc = img.dataset.lazySrc;
+      if (!realSrc) return;
+      // Charger la vraie image
+      var loader = new Image();
+      loader.onload = function() {
+        img.src = realSrc;
+        img.style.opacity = '1';
+        img.removeAttribute('data-lazy-src');
+      };
+      loader.onerror = function() {
+        img.style.opacity = '0.4';
+        img.removeAttribute('data-lazy-src');
+      };
+      loader.src = realSrc;
+      LAZY_OBSERVER.unobserve(img);
+    });
+  }, {
+    rootMargin: '200px', // Précharger 200px avant que l'image entre dans la vue
+    threshold: 0.01,
+  });
+}
+
+// Placeholder SVG très léger (skeleton animé)
+function _getPlaceholderSVG() {
+  return 'data:image/svg+xml;charset=UTF-8,'
+    + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    + '<rect width="100" height="100" fill="#0d1220"/>'
+    + '<rect x="20" y="35" width="60" height="2" fill="#1a2535"/>'
+    + '<rect x="20" y="42" width="60" height="2" fill="#1a2535"/>'
+    + '<rect x="20" y="49" width="60" height="2" fill="#1a2535"/>'
+    + '<text x="50" y="68" font-family="sans-serif" font-size="9" fill="#22c55e" text-anchor="middle" opacity="0.5">◈</text>'
+    + '</svg>');
+}
+
+// Crée un <img> en lazy loading
+function _buildLazyImg(src, name, extraStyle) {
+  _initLazyObserver();
+  var placeholder = _getPlaceholderSVG();
+  var baseStyle = 'width:100%;height:100%;object-fit:cover;display:block;background:#0d1220;opacity:0;transition:opacity 0.3s ease;' + (extraStyle || '');
+  // Génère un ID unique pour pouvoir hook après injection
+  var id = 'lz' + Math.random().toString(36).slice(2, 9);
+  // L'observer est branché après que l'élément soit dans le DOM
+  setTimeout(function() {
+    var el = document.getElementById(id);
+    if (el && LAZY_OBSERVER) LAZY_OBSERVER.observe(el);
+    else if (el) { // Fallback sans IntersectionObserver
+      el.src = src;
+      el.style.opacity = '1';
+    }
+  }, 50);
+  return '<img id="' + id + '" src="' + placeholder + '" data-lazy-src="' + src + '" alt="' + (name || '') + '" style="' + baseStyle + '" loading="lazy"/>';
 }
 
 function toImgHTML(src, name) {
@@ -819,5 +894,6 @@ function getExerciseVisual(name, muscle, phase) {
 window.getExerciseVisual  = getExerciseVisual;
 window.hasExerciseImage   = hasExerciseImage;
 window.EXERCISE_IMAGES    = EXERCISE_IMAGES;
+window.buildLazyImg       = _buildLazyImg;
 
 })();

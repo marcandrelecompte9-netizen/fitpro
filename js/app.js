@@ -16251,7 +16251,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 const svgEnd = getExerciseVisual(exercise.name, exercise.muscle, 'end');
                 const _imgSrc = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exercise.name];
                 const _mediaHTML = _imgSrc
-                    ? '<div style="width:100%;height:100%;"><img src="' + _imgSrc + '" alt="' + exercise.name + '" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>'
+                    ? '<div style="width:100%;height:100%;">' + window.buildLazyImg(_imgSrc, exercise.name) + '</div>'
                     : '<div class="exercise-animation"><div class="exercise-svg-container">' + svgStart + '<div class="position-label position-start">Début</div></div><div class="arrow-indicator">→</div><div class="exercise-svg-container">' + svgEnd + '<div class="position-label position-end">Fin</div></div></div>';
                 
                 card.innerHTML = `
@@ -16440,7 +16440,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const svgEnd = getExerciseVisual(exercise.name, exercise.muscle, 'end');
             const _imgSrc2 = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exercise.name];
             const _mediaHTML2 = _imgSrc2
-                ? '<div style="width:100%;height:100%;"><img src="' + _imgSrc2 + '" alt="' + exercise.name + '" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block;"/></div>'
+                ? '<div style="width:100%;height:100%;border-radius:12px;overflow:hidden;">' + window.buildLazyImg(_imgSrc2, exercise.name, 'border-radius:12px;') + '</div>'
                 : '<div class="exercise-animation"><div class="exercise-svg-container">' + svgStart + '<div class="position-label position-start">Début</div></div><div class="arrow-indicator">→</div><div class="exercise-svg-container">' + svgEnd + '<div class="position-label position-end">Fin</div></div></div>';
             
             document.getElementById('modalDifficulty').innerHTML = 
@@ -17035,7 +17035,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             imagesDiv.className = 'exercise-timer-images';
             imagesDiv.style.cssText = 'display: flex; gap: 20px; align-items: center; justify-content: center; margin: 20px auto; max-width: 700px; width: 100%;';
             if (_imgSrc3) {
-                imagesDiv.innerHTML = '<div style="width:100%;max-width:500px;border-radius:14px;overflow:hidden;"><img src="' + _imgSrc3 + '" alt="' + exerciseName + '" style="width:100%;display:block;border-radius:14px;"/></div>';
+                imagesDiv.innerHTML = '<div style="width:100%;max-width:500px;aspect-ratio:1.21;border-radius:14px;overflow:hidden;">' + window.buildLazyImg(_imgSrc3, exerciseName, 'border-radius:14px;') + '</div>';
             } else {
                 imagesDiv.innerHTML = `
                 <div style="flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0;">
