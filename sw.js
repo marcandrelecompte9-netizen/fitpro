@@ -1,12 +1,13 @@
 // Awakened — Service Worker
-// Enables offline support and PWA installation
+// Enables full offline support and PWA installation
 
-const CACHE_NAME = 'awakened-v4';
+const CACHE_NAME = 'awakened-v5';
 const ASSETS = [
   '/',
   '/index.html',
   '/css/style.css',
   '/js/exercises.js',
+  '/js/exercise-visuals.js',
   '/js/app.js',
   '/js/adventure.js',
   '/js/challenges.js',
@@ -17,7 +18,7 @@ const ASSETS = [
   'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css'
 ];
 
-// Install — cache all assets
+// Install — cache all core assets
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
@@ -33,17 +34,44 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch — serve from cache, fall back to network
+// Fetch — cache-first strategy with auto-cache for images
 self.addEventListener('fetch', e => {
+  // Ignorer les requêtes non-GET (POST, PUT...)
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
     caches.match(e.request).then(cached => {
-      if (cached) return cached;
+      if (cached) {
+        // Pour les images d'exercices : refresh en arrière-plan
+        if (e.request.url.includes('/images/exercises/')) {
+          fetch(e.request).then(response => {
+            if (response && response.status === 200) {
+              caches.open(CACHE_NAME).then(c => c.put(e.request, response));
+            }
+          }).catch(() => {});
+        }
+        return cached;
+      }
       return fetch(e.request).then(response => {
         if (!response || response.status !== 200 || response.type === 'opaque') return response;
         const clone = response.clone();
-        caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        // Cache automatique pour : images, fonts, JS, CSS
+        const url = e.request.url;
+        if (url.includes('/images/') || url.includes('.webp') || url.includes('.png') ||
+            url.includes('.woff') || url.includes('.js') || url.includes('.css')) {
+          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        }
         return response;
-      }).catch(() => caches.match('/index.html'));
+      }).catch(() => {
+        // Offline fallback
+        if (e.request.mode === 'navigate') return caches.match('/index.html');
+        return new Response('', { status: 503, statusText: 'Offline' });
+      });
     })
   );
+});
+
+// Messages depuis l'app (pour forcer la mise à jour)
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });

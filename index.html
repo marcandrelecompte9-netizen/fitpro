@@ -304,10 +304,8 @@
                         <div id="homeQuote" style="font-size:0.88em;color:white;font-style:italic;line-height:1.5;font-weight:500;">"Le succès n'est pas final, l'échec n'est pas fatal."</div>
                         <div id="homeQuoteAuthor" style="font-size:0.68em;color:rgba(255,255,255,0.45);margin-top:4px;font-weight:600;text-align:right;"></div>
                     </div>
-                    <!-- CTA -->
-                    <button onclick="switchTab('workouts')" style="width:100%;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:99px;padding:14px 20px;font-size:1.05em;font-weight:800;cursor:pointer;letter-spacing:0.2px;">
-                        ⚡ Démarrer une séance
-                    </button>
+                    <!-- CTA intelligent (rendu dynamique) -->
+                    <div id="smartStartContainer"></div>
                 </div>
             </div>
 
@@ -359,6 +357,9 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ══ SUGGESTION HEBDOMADAIRE ════════════════════════════════ -->
+            <div id="weeklySuggestionCard"></div>
 
             <!-- Fitness Index of the Day -->
             <div class="card" id="fitnessIndexCard" style="padding:20px;">
@@ -489,7 +490,17 @@
 
             <!-- My Routines List -->
             <div class="card">
-                <h3 style="color: #16a34a; margin-bottom: 20px;">📋 Mes Routines</h3>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:8px;flex-wrap:wrap;">
+                    <h3 style="color: #16a34a; margin: 0;">📋 Mes Routines</h3>
+                    <div style="display:flex;gap:6px;">
+                        <button onclick="showTemplatesModal()" style="background:linear-gradient(135deg,#a855f7,#7c3aed);color:white;border:none;border-radius:10px;padding:8px 12px;font-size:0.78em;font-weight:800;cursor:pointer;">
+                            📚 Templates
+                        </button>
+                        <button onclick="showProgressiveProgramsModal()" style="background:linear-gradient(135deg,#06b6d4,#0891b2);color:white;border:none;border-radius:10px;padding:8px 12px;font-size:0.78em;font-weight:800;cursor:pointer;">
+                            🚀 Progressifs
+                        </button>
+                    </div>
+                </div>
 
                 <div id="routinesList">
                     <!-- Routines will be rendered here -->
@@ -1490,71 +1501,87 @@
 
             <!-- Exercise View (shown during workout) -->
             <div id="exerciseView" class="hidden">
-                <!-- ── Barre top avec bouton Quitter — toujours visible ── -->
-                <div id="workoutTopBar" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px;background:#0D0D0D;gap:8px;">
-                    <div id="workoutTopTitle" style="font-size:0.72em;color:rgba(255,255,255,0.4);font-weight:600;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"></div>
+                <!-- ── Barre top sci-fi minimaliste ── -->
+                <div id="workoutTopBar" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;background:linear-gradient(180deg,#050810 0%,#0a0e18 100%);gap:8px;border-bottom:1px solid rgba(34,197,94,0.1);position:relative;">
+                    <!-- Glow accent line -->
+                    <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(34,197,94,0.4),transparent);"></div>
+
+                    <div id="workoutTopTitle" style="font-size:0.7em;color:#94a3b8;font-weight:700;letter-spacing:1px;text-transform:uppercase;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"></div>
+                    <div id="liveVolumeChip" style="font-size:0.68em;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);padding:6px 11px;border-radius:99px;flex-shrink:0;color:#cbd5e1;"></div>
+                    <button onclick="toggleFullscreenMode()" title="Plein écran"
+                            style="background:rgba(34,197,94,0.08);color:#4ade80;border:1px solid rgba(34,197,94,0.25);
+                                   border-radius:10px;padding:6px 10px;font-size:1em;font-weight:700;cursor:pointer;
+                                   min-width:36px;min-height:36px;flex-shrink:0;touch-action:manipulation;transition:all 0.2s;">
+                        ⛶
+                    </button>
                     <button onclick="toggleWorkoutOptionsPanel()"
-                            style="background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);
-                                   border-radius:8px;padding:6px 12px;font-size:1em;font-weight:700;cursor:pointer;
-                                   min-width:36px;min-height:36px;flex-shrink:0;touch-action:manipulation;">
+                            style="background:rgba(255,255,255,0.05);color:#cbd5e1;border:1px solid rgba(255,255,255,0.1);
+                                   border-radius:10px;padding:6px 12px;font-size:1.05em;font-weight:700;cursor:pointer;
+                                   min-width:36px;min-height:36px;flex-shrink:0;touch-action:manipulation;letter-spacing:2px;">
                         ⋯
                     </button>
                     <button id="quitBtn"
-                            style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);
-                                   border-radius:8px;padding:6px 12px;font-size:0.78em;font-weight:700;cursor:pointer;
-                                   min-height:36px;flex-shrink:0;display:flex;align-items:center;gap:4px;
+                            style="background:rgba(239,68,68,0.08);color:#f87171;border:1px solid rgba(239,68,68,0.3);
+                                   border-radius:10px;padding:6px 11px;font-size:0.75em;font-weight:800;cursor:pointer;
+                                   min-height:36px;flex-shrink:0;display:flex;align-items:center;gap:4px;letter-spacing:0.5px;
                                    touch-action:manipulation;-webkit-tap-highlight-color:rgba(239,68,68,0.3);"
                             onclick="quitWorkout()">
-                        ❌ Quitter
+                        ✕ QUITTER
                     </button>
                 </div>
-                <div class="card">
+                <div class="card workout-main-card" style="background:linear-gradient(160deg,#0a0e18 0%,#0F1014 100%);border:1px solid rgba(34,197,94,0.12);border-radius:0;border-top:none;box-shadow:none;color:#e2e8f0;">
                     <!-- Workout Type Badge -->
-                    <div id="workoutTypeBadge" style="background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); color: white; padding: 12px 20px; border-radius: 12px; text-align: center; font-weight: bold; margin-bottom: 10px; display: none;">
+                    <div id="workoutTypeBadge" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:8px 16px;border-radius:99px;text-align:center;font-weight:800;font-size:0.74em;letter-spacing:1.5px;margin-bottom:10px;display:none;text-transform:uppercase;">
                         🧠 Séance Intelligente
                     </div>
 
                     <!-- Muscles Overview Badge -->
-                    <div id="musclesOverviewBadge" style="background: linear-gradient(135deg, #FFF3E0 0%, #FFF3E0 100%); color: #16a34a; padding: 10px 15px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 15px; font-size: 0.9em; border: 2px solid #bbf7d0; display: none;">
+                    <div id="musclesOverviewBadge" style="background:rgba(168,85,247,0.06);color:#c084fc;padding:8px 14px;border-radius:10px;text-align:center;font-weight:700;margin-bottom:14px;font-size:0.78em;border:1px solid rgba(168,85,247,0.2);display:none;letter-spacing:0.5px;">
                         💪 Muscles : Pectoraux • Dos • Épaules
                     </div>
 
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
+                    <div class="progress-bar" style="background:#0a0d14;border-radius:99px;overflow:hidden;height:6px;margin-bottom:14px;border:1px solid rgba(34,197,94,0.15);">
+                        <div class="progress-fill" id="progressFill" style="background:linear-gradient(90deg,#10b981,#22c55e,#4ade80);box-shadow:0 0 12px rgba(34,197,94,0.5);"></div>
                     </div>
 
-                    <div class="timer">
-                        <div class="next-exercise-preview" id="nextExercisePreview">
-                            <div class="next-exercise-label">⏭️ Prochain</div>
-                            <div class="next-exercise-name" id="nextExerciseName">-</div>
+                    <div class="timer" style="text-align:center;padding:8px 0;">
+                        <div class="next-exercise-preview" id="nextExercisePreview" style="margin-bottom:14px;">
+                            <div class="next-exercise-label" style="font-size:0.62em;color:#64748b;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;">⏭ Prochain</div>
+                            <div class="next-exercise-name" id="nextExerciseName" style="font-size:0.85em;color:#94a3b8;font-weight:600;">-</div>
                         </div>
-                        <div class="exercise-number" id="exerciseNumber">Exercise 1/10</div>
-                        <div class="exercise-name" id="exerciseName">Échauffement</div>
+                        <div class="exercise-number" id="exerciseNumber" style="font-size:0.62em;color:#4ade80;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px;">Exercise 1/10</div>
+                        <div class="exercise-name" id="exerciseName" style="font-size:1.6em;font-weight:900;color:white;letter-spacing:-0.5px;line-height:1.1;margin-bottom:10px;">Échauffement</div>
                         <!-- Muscle Indicator -->
-                        <div id="muscleBadge" style="display: inline-block; background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.9em; margin-top: 10px; font-weight: bold;">
+                        <div id="muscleBadge" style="display:inline-block;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.4);color:#4ade80;padding:5px 14px;border-radius:99px;font-size:0.74em;margin-top:4px;font-weight:800;letter-spacing:0.5px;">
                             💪 Pectoraux
                         </div>
                         <!-- Équipement requis -->
-                        <div id="equipmentBadges" style="display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px;"></div>
-                        <div class="timer-display" id="timerDisplay">00:45</div>
+                        <div id="equipmentBadges" style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:8px;"></div>
+                        <div class="timer-display" id="timerDisplay" style="font-size:3.4em;font-weight:900;color:white;letter-spacing:-2px;margin:14px 0 4px;font-variant-numeric:tabular-nums;text-shadow:0 0 30px rgba(34,197,94,0.3);">00:45</div>
 
                         <!-- Optional Tracking Inputs (visible only in REPS mode) -->
-                        <div id="repsTrackingInputs" style="display: none; margin: 16px auto; max-width: 460px;">
-                            <div style="background:linear-gradient(135deg,#16a34a15,#15803d30);padding:18px;border-radius:16px;border:2px solid #16a34a40;">
+                        <div id="repsTrackingInputs" style="display: none; margin: 18px auto 0; max-width: 480px;">
+                            <div style="background:linear-gradient(160deg,#0a0e18,#0F1014 60%,#0a0e18);padding:18px;border-radius:18px;border:1px solid rgba(34,197,94,0.18);box-shadow:0 8px 32px rgba(0,0,0,0.4),0 0 0 1px rgba(255,255,255,0.02) inset;position:relative;overflow:hidden;">
 
-                                <!-- Série indicator -->
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                                    <div id="setIndicator" style="font-size:1em;font-weight:800;color:#4ade80;">📊 Série 1 / 3</div>
+                                <!-- Coins décoratifs sci-fi -->
+                                <div style="position:absolute;top:6px;left:6px;width:14px;height:14px;border-top:2px solid rgba(34,197,94,0.4);border-left:2px solid rgba(34,197,94,0.4);"></div>
+                                <div style="position:absolute;top:6px;right:6px;width:14px;height:14px;border-top:2px solid rgba(34,197,94,0.4);border-right:2px solid rgba(34,197,94,0.4);"></div>
+                                <div style="position:absolute;bottom:6px;left:6px;width:14px;height:14px;border-bottom:2px solid rgba(34,197,94,0.4);border-left:2px solid rgba(34,197,94,0.4);"></div>
+                                <div style="position:absolute;bottom:6px;right:6px;width:14px;height:14px;border-bottom:2px solid rgba(34,197,94,0.4);border-right:2px solid rgba(34,197,94,0.4);"></div>
 
+                                <!-- Série indicator avec progress dots -->
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                                    <div id="setIndicator" style="font-size:0.95em;font-weight:900;color:#4ade80;letter-spacing:0.5px;">📊 Série 1 / 3</div>
+                                    <div id="setProgressDots" style="display:flex;gap:5px;"></div>
                                 </div>
 
-                                <!-- Warmup toggle -->
-                                <div id="warmupSetsRow" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:rgba(251,191,36,0.1);border-radius:10px;border:1px solid rgba(251,191,36,0.3);">
-                                    <span style="font-size:0.85em;color:#fcd34d;font-weight:600;">🔥 Séries d'échauffement</span>
-                                    <div style="margin-left:auto;display:flex;gap:6px;">
-                                        <button id="warmupBtn0" onclick="addWarmupSet(0)" style="background:#fbbf24;color:white;border:none;border-radius:8px;padding:4px 10px;font-size:0.78em;font-weight:700;cursor:pointer;">Aucune</button>
-                                        <button id="warmupBtn1" onclick="addWarmupSet(1)" style="background:white;color:#fcd34d;border:1px solid #fbbf24;border-radius:8px;padding:4px 10px;font-size:0.78em;font-weight:700;cursor:pointer;">×1</button>
-                                        <button id="warmupBtn2" onclick="addWarmupSet(2)" style="background:white;color:#fcd34d;border:1px solid #fbbf24;border-radius:8px;padding:4px 10px;font-size:0.78em;font-weight:700;cursor:pointer;">×2</button>
+                                <!-- Warmup toggle compact -->
+                                <div id="warmupSetsRow" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 11px;background:rgba(251,191,36,0.05);border-radius:10px;border:1px solid rgba(251,191,36,0.15);">
+                                    <span style="font-size:0.78em;color:#fbbf24;font-weight:700;letter-spacing:0.5px;">🔥 Échauffement</span>
+                                    <div style="margin-left:auto;display:flex;gap:5px;">
+                                        <button id="warmupBtn0" onclick="addWarmupSet(0)" style="background:#fbbf24;color:#1e293b;border:none;border-radius:7px;padding:4px 11px;font-size:0.74em;font-weight:800;cursor:pointer;">Aucune</button>
+                                        <button id="warmupBtn1" onclick="addWarmupSet(1)" style="background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:7px;padding:4px 11px;font-size:0.74em;font-weight:800;cursor:pointer;">×1</button>
+                                        <button id="warmupBtn2" onclick="addWarmupSet(2)" style="background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:7px;padding:4px 11px;font-size:0.74em;font-weight:800;cursor:pointer;">×2</button>
                                     </div>
                                 </div>
 
@@ -1564,24 +1591,37 @@
                                 <!-- 🚀 Surcharge progressive suggestion -->
                                 <div id="progressiveOverloadBanner" style="display:none;margin-bottom:10px;padding:10px 12px;background:linear-gradient(135deg,rgba(22,163,74,0.15),rgba(74,222,128,0.1));border:1px solid rgba(74,222,128,0.35);border-radius:12px;font-size:0.82em;color:#4ade80;font-weight:600;line-height:1.4;"></div>
 
-                                <!-- Inputs reps + poids -->
+                                <!-- 💡 Suggestion de charge intelligente -->
+                                <div id="loadSuggestionContainer"></div>
+
+                                <!-- Inputs reps + poids avec boutons ± -->
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-                                    <div style="background:white;padding:12px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,0.08);">
-                                        <label style="display:block;font-size:0.75em;font-weight:700;margin-bottom:6px;color:#4ade80;text-transform:uppercase;letter-spacing:0.5px;">💪 Reps</label>
-                                        <input type="number" id="quickRepsInput" min="1" max="200" placeholder="10"
-                                               style="width:100%;padding:10px;font-size:1.5em;font-weight:700;border:2px solid #FFF3E0;border-radius:10px;text-align:center;background:#f8fafc;color:#1e293b;" />
+                                    <!-- REPS -->
+                                    <div style="background:#0a0d14;padding:10px;border-radius:13px;border:1px solid rgba(34,197,94,0.15);">
+                                        <label style="display:block;font-size:0.62em;font-weight:900;margin-bottom:5px;color:#4ade80;text-transform:uppercase;letter-spacing:1.5px;text-align:center;">💪 REPS</label>
+                                        <div style="display:flex;align-items:center;gap:4px;">
+                                            <button type="button" onclick="document.getElementById('quickRepsInput').stepDown();document.getElementById('quickRepsInput').dispatchEvent(new Event('input'));" style="width:32px;height:38px;border-radius:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;font-size:1em;font-weight:900;cursor:pointer;flex-shrink:0;">−</button>
+                                            <input type="number" id="quickRepsInput" min="1" max="200" placeholder="10"
+                                                   style="flex:1;min-width:0;padding:6px 0;font-size:1.4em;font-weight:900;border:none;border-radius:8px;text-align:center;background:transparent;color:#e2e8f0;" />
+                                            <button type="button" onclick="document.getElementById('quickRepsInput').stepUp();document.getElementById('quickRepsInput').dispatchEvent(new Event('input'));" style="width:32px;height:38px;border-radius:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;font-size:1em;font-weight:900;cursor:pointer;flex-shrink:0;">+</button>
+                                        </div>
                                     </div>
-                                    <div style="background:white;padding:12px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,0.08);">
-                                        <label style="display:block;font-size:0.75em;font-weight:700;margin-bottom:6px;color:#4ade80;text-transform:uppercase;letter-spacing:0.5px;"><span data-weight-unit>⚖️ Poids (lbs)</span></label>
-                                        <input type="number" id="quickWeightInput" min="0" step="1" placeholder="0"
-                                               style="width:100%;padding:10px;font-size:1.5em;font-weight:700;border:2px solid #FFF3E0;border-radius:10px;text-align:center;background:#f8fafc;color:#1e293b;" />
+                                    <!-- POIDS -->
+                                    <div style="background:#0a0d14;padding:10px;border-radius:13px;border:1px solid rgba(34,197,94,0.15);">
+                                        <label style="display:block;font-size:0.62em;font-weight:900;margin-bottom:5px;color:#4ade80;text-transform:uppercase;letter-spacing:1.5px;text-align:center;"><span data-weight-unit>⚖️ POIDS</span></label>
+                                        <div style="display:flex;align-items:center;gap:4px;">
+                                            <button type="button" onclick="(function(){var i=document.getElementById('quickWeightInput');i.value=Math.max(0,(parseFloat(i.value)||0)-2.5);i.dispatchEvent(new Event('input'));})()" style="width:32px;height:38px;border-radius:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;font-size:1em;font-weight:900;cursor:pointer;flex-shrink:0;">−</button>
+                                            <input type="number" id="quickWeightInput" min="0" step="0.5" placeholder="0"
+                                                   style="flex:1;min-width:0;padding:6px 0;font-size:1.4em;font-weight:900;border:none;border-radius:8px;text-align:center;background:transparent;color:#e2e8f0;" />
+                                            <button type="button" onclick="(function(){var i=document.getElementById('quickWeightInput');i.value=(parseFloat(i.value)||0)+2.5;i.dispatchEvent(new Event('input'));})()" style="width:32px;height:38px;border-radius:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;font-size:1em;font-weight:900;cursor:pointer;flex-shrink:0;">+</button>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- Bouton Compléter la série -->
+                                <!-- Bouton Compléter la série avec glow -->
                                 <button onclick="completeCurrentSet()" id="completeSetBtn"
-                                        style="width:100%;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:12px;padding:13px;font-size:1em;font-weight:800;cursor:pointer;margin-bottom:8px;">
-                                    💪 Série 1 — Entrer reps puis appuyer
+                                        style="width:100%;background:linear-gradient(135deg,#10b981 0%,#15803d 100%);color:white;border:none;border-radius:13px;padding:14px;font-size:0.95em;font-weight:900;cursor:pointer;letter-spacing:0.5px;box-shadow:0 6px 24px rgba(16,185,129,0.3),0 0 0 1px rgba(255,255,255,0.1) inset;transition:transform 0.1s;text-transform:uppercase;">
+                                    ✓ Valider la série
                                 </button>
 
                             </div>
@@ -1946,6 +1986,9 @@
                         <!-- Comparaison stats célébrité -->
                         <div id="completionCelebStats" style="display:none;margin-bottom:14px;"></div>
 
+                        <!-- 🎯 Verdict de séance -->
+                        <div id="completionVerdict" style="display:none;margin-bottom:14px;"></div>
+
                         <!-- Streak -->
                         <div id="completionStreak" style="background:rgba(16,185,129,0.15);border-radius:12px;padding:12px 14px;margin-bottom:20px;border:1px solid rgba(16,185,129,0.3);display:flex;align-items:center;gap:12px;">
                             <div style="font-size:2em;">🔥</div>
@@ -2227,6 +2270,54 @@
         <!-- Custom Workout Tab -->
         <!-- Settings Tab -->
         <div id="settingsTab" class="tab-content">
+
+            <!-- 💾 Sauvegardes -->
+            <div class="card" onclick="showBackupManagerModal()" style="cursor:pointer;display:flex;align-items:center;gap:14px;">
+                <div style="font-size:2em;flex-shrink:0;">💾</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:800;color:#e2e8f0;font-size:1em;">Sauvegardes</div>
+                    <div style="font-size:0.78em;color:#94a3b8;margin-top:2px;">Auto quotidienne · Export / Import</div>
+                </div>
+                <div style="font-size:1.2em;color:#475569;flex-shrink:0;">›</div>
+            </div>
+
+            <!-- 🔄 Périodisation -->
+            <div class="card" style="padding:14px 16px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span style="font-size:1.3em;">🔄</span>
+                            <div style="font-weight:800;color:#e2e8f0;font-size:0.95em;">Périodisation automatique</div>
+                        </div>
+                        <div style="font-size:0.74em;color:#94a3b8;line-height:1.4;">Cycle de 4 semaines : Hypertrophie → Force → Hypertrophie+ → Décharge</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;">
+                        <input type="checkbox" id="periodizationToggle" onchange="setPeriodizationEnabled(this.checked)" style="opacity:0;width:0;height:0;position:absolute;">
+                        <span id="periodizationSlider" style="position:absolute;cursor:pointer;inset:0;background:#334155;border-radius:26px;transition:0.3s;">
+                            <span id="periodizationThumb" style="position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:white;border-radius:50%;transition:0.3s;display:block;"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 🔥 Échauffement -->
+            <div class="card" style="padding:14px 16px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span style="font-size:1.3em;">🔥</span>
+                            <div style="font-weight:800;color:#e2e8f0;font-size:0.95em;">Échauffement adaptatif</div>
+                        </div>
+                        <div style="font-size:0.74em;color:#94a3b8;line-height:1.4;">Générer automatiquement un échauffement selon les muscles travaillés</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;">
+                        <input type="checkbox" id="warmupToggle" onchange="setWarmupEnabled(this.checked)" style="opacity:0;width:0;height:0;position:absolute;">
+                        <span id="warmupSlider" style="position:absolute;cursor:pointer;inset:0;background:#334155;border-radius:26px;transition:0.3s;">
+                            <span id="warmupThumb" style="position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:white;border-radius:50%;transition:0.3s;display:block;"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
 
             <!-- Mode Jeu + Mode Chasseur combinés -->
             <div class="card" id="gameModeCard">
@@ -3522,6 +3613,38 @@
             if (typeof initAdventureSystem === 'function') initAdventureSystem();
             if (typeof initChallengeSystem === 'function') initChallengeSystem();
             if (typeof startSystemRandomMessages === 'function') startSystemRandomMessages();
+
+            // Init toggles état (périodisation + échauffement)
+            setTimeout(() => {
+                const pToggle = document.getElementById('periodizationToggle');
+                const pSlider = document.getElementById('periodizationSlider');
+                const pThumb  = document.getElementById('periodizationThumb');
+                if (pToggle && typeof getPeriodizationEnabled === 'function') {
+                    const on = getPeriodizationEnabled();
+                    pToggle.checked = on;
+                    if (pSlider) pSlider.style.background = on ? '#16a34a' : '#334155';
+                    if (pThumb)  pThumb.style.left  = on ? '23px' : '3px';
+                    pToggle.addEventListener('change', e => {
+                        const v = e.target.checked;
+                        if (pSlider) pSlider.style.background = v ? '#16a34a' : '#334155';
+                        if (pThumb)  pThumb.style.left = v ? '23px' : '3px';
+                    });
+                }
+                const wToggle = document.getElementById('warmupToggle');
+                const wSlider = document.getElementById('warmupSlider');
+                const wThumb  = document.getElementById('warmupThumb');
+                if (wToggle && typeof getWarmupEnabled === 'function') {
+                    const on = getWarmupEnabled();
+                    wToggle.checked = on;
+                    if (wSlider) wSlider.style.background = on ? '#f59e0b' : '#334155';
+                    if (wThumb)  wThumb.style.left = on ? '23px' : '3px';
+                    wToggle.addEventListener('change', e => {
+                        const v = e.target.checked;
+                        if (wSlider) wSlider.style.background = v ? '#f59e0b' : '#334155';
+                        if (wThumb)  wThumb.style.left = v ? '23px' : '3px';
+                    });
+                }
+            }, 500);
         });
     </script>
 

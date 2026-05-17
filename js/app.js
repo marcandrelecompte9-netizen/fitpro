@@ -3711,6 +3711,680 @@
         // State management
         let currentTab = 'home';
         let currentWorkout = null;
+
+        // ═══════════════════════════════════════════════════════════════
+        // SAUVEGARDE / RESTAURATION — Export JSON + Auto-backup IndexedDB
+        // ═══════════════════════════════════════════════════════════════
+        function exportAllUserData() {
+            const data = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && (k.startsWith('fitpro') || k.startsWith('workout') || k === 'userProfile')) {
+                    data[k] = localStorage.getItem(k);
+                }
+            }
+            return {
+                version: '1.0',
+                exportedAt: new Date().toISOString(),
+                appName: 'Awakened',
+                data: data,
+            };
+        }
+
+        function downloadBackup() {
+            const backup = exportAllUserData();
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `awakened-backup-${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+            showToast('💾 Sauvegarde téléchargée', 'success', 2500);
+        }
+
+        function restoreFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const backup = JSON.parse(e.target.result);
+                    if (!backup.data || backup.appName !== 'Awakened') {
+                        showToast('❌ Fichier de sauvegarde invalide', 'error', 3000);
+                        return;
+                    }
+                    if (!confirm(`Restaurer cette sauvegarde du ${new Date(backup.exportedAt).toLocaleDateString('fr-FR')} ?\n\nLes données actuelles seront REMPLACÉES.`)) return;
+                    // Sauvegarde de sécurité avant restauration
+                    const safety = exportAllUserData();
+                    sessionStorage.setItem('awakened_pre_restore_safety', JSON.stringify(safety));
+                    // Effacer les clés actuelles et restaurer
+                    Object.keys(backup.data).forEach(k => {
+                        localStorage.setItem(k, backup.data[k]);
+                    });
+                    showToast('✅ Restauration réussie ! Rechargement...', 'success', 2000);
+                    setTimeout(() => location.reload(), 1500);
+                } catch(err) {
+                    showToast('❌ Erreur : fichier corrompu', 'error', 3000);
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Auto-backup quotidien dans IndexedDB (max 7 backups conservés)
+        function autoBackupIfNeeded() {
+            try {
+                const last = parseInt(localStorage.getItem('fitproLastAutoBackup') || '0');
+                const oneDayMs = 24 * 60 * 60 * 1000;
+                if (Date.now() - last < oneDayMs) return; // Déjà fait aujourd'hui
+
+                // Ouvrir/créer la DB
+                const req = indexedDB.open('AwakenedBackups', 1);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('backups')) {
+                        db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
+                    }
+                };
+                req.onsuccess = (e) => {
+                    const db = e.target.result;
+                    const tx = db.transaction(['backups'], 'readwrite');
+                    const store = tx.objectStore('backups');
+                    const backup = exportAllUserData();
+                    store.add(backup);
+                    // Garder seulement les 7 derniers
+                    const getAll = store.getAll();
+                    getAll.onsuccess = () => {
+                        const all = getAll.result || [];
+                        if (all.length > 7) {
+                            all.slice(0, all.length - 7).forEach(b => store.delete(b.id));
+                        }
+                    };
+                    localStorage.setItem('fitproLastAutoBackup', String(Date.now()));
+                };
+            } catch(e) { console.warn('Auto-backup failed:', e); }
+        }
+
+        function listAutoBackups(callback) {
+            try {
+                const req = indexedDB.open('AwakenedBackups', 1);
+                req.onsuccess = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('backups')) { callback([]); return; }
+                    const tx = db.transaction(['backups'], 'readonly');
+                    const store = tx.objectStore('backups');
+                    const getAll = store.getAll();
+                    getAll.onsuccess = () => callback(getAll.result || []);
+                };
+                req.onerror = () => callback([]);
+            } catch(e) { callback([]); }
+        }
+
+        function restoreAutoBackup(backupId) {
+            const req = indexedDB.open('AwakenedBackups', 1);
+            req.onsuccess = (e) => {
+                const db = e.target.result;
+                const tx = db.transaction(['backups'], 'readonly');
+                const store = tx.objectStore('backups');
+                const getReq = store.get(backupId);
+                getReq.onsuccess = () => {
+                    const backup = getReq.result;
+                    if (!backup) { showToast('Sauvegarde introuvable', 'error', 2000); return; }
+                    if (!confirm(`Restaurer la sauvegarde du ${new Date(backup.exportedAt).toLocaleString('fr-FR')} ?`)) return;
+                    Object.keys(backup.data).forEach(k => localStorage.setItem(k, backup.data[k]));
+                    showToast('✅ Restauration réussie ! Rechargement...', 'success', 1500);
+                    setTimeout(() => location.reload(), 1500);
+                };
+            };
+        }
+
+        function showBackupManagerModal() {
+            listAutoBackups((backups) => {
+                document.getElementById('backupManagerModal')?.remove();
+                const sorted = (backups || []).sort((a, b) => new Date(b.exportedAt) - new Date(a.exportedAt));
+                const modal = document.createElement('div');
+                modal.id = 'backupManagerModal';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;';
+                modal.innerHTML = `
+                    <div style="width:100%;max-width:420px;background:#0F1014;border-radius:20px;padding:22px;max-height:85vh;overflow-y:auto;border:1px solid rgba(34,197,94,0.2);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                            <h3 style="margin:0;color:white;font-size:1.1em;">💾 Sauvegardes</h3>
+                            <button onclick="document.getElementById('backupManagerModal').remove()" style="background:transparent;border:none;color:#94a3b8;font-size:1.4em;cursor:pointer;">✕</button>
+                        </div>
+
+                        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
+                            <button onclick="downloadBackup()" style="width:100%;padding:13px;background:linear-gradient(135deg,#10b981,#15803d);color:white;border:none;border-radius:12px;font-weight:800;cursor:pointer;font-size:0.92em;">
+                                📥 Télécharger une sauvegarde
+                            </button>
+                            <label style="width:100%;padding:13px;background:rgba(34,197,94,0.08);color:#4ade80;border:1.5px dashed rgba(34,197,94,0.35);border-radius:12px;font-weight:700;cursor:pointer;font-size:0.88em;text-align:center;display:block;">
+                                📤 Restaurer depuis un fichier
+                                <input type="file" accept=".json" style="display:none;" onchange="restoreFromFile(this.files[0]);document.getElementById('backupManagerModal').remove();"/>
+                            </label>
+                        </div>
+
+                        <div style="font-size:0.7em;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-bottom:10px;text-transform:uppercase;">◈ Sauvegardes automatiques (${sorted.length})</div>
+                        ${sorted.length === 0 ? `<div style="text-align:center;color:#475569;padding:20px;font-size:0.85em;">Aucune sauvegarde automatique encore.<br/>Elles sont créées chaque jour.</div>`
+                        : sorted.map(b => `
+                            <div style="background:#1a1d24;border:1px solid rgba(34,197,94,0.1);border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:0.82em;color:white;font-weight:700;">${new Date(b.exportedAt).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</div>
+                                    <div style="font-size:0.66em;color:#64748b;">${new Date(b.exportedAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})} · ${Object.keys(b.data||{}).length} entrées</div>
+                                </div>
+                                <button onclick="restoreAutoBackup(${b.id})" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:6px 12px;font-size:0.74em;font-weight:700;cursor:pointer;flex-shrink:0;">Restaurer</button>
+                            </div>`).join('')}
+
+                        <div style="font-size:0.68em;color:#475569;margin-top:14px;text-align:center;line-height:1.5;">
+                            💡 Sauvegardes auto quotidiennes (7 dernières)<br/>
+                            Données stockées localement sur ton appareil
+                        </div>
+                    </div>`;
+                modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+                document.body.appendChild(modal);
+            });
+        }
+
+        // Lancer l'auto-backup à chaque ouverture (max 1× par jour)
+        setTimeout(autoBackupIfNeeded, 5000);
+
+        // ═══════════════════════════════════════════════════════════════
+        // PÉRIODISATION AUTOMATIQUE — Cycles force / hypertrophie / endurance
+        // ═══════════════════════════════════════════════════════════════
+        // Cycle de 4 semaines avec phases alternées :
+        //   Sem 1 : Hypertrophie (volume modéré, reps 8-12)
+        //   Sem 2 : Force (charge max, reps 3-6)
+        //   Sem 3 : Hypertrophie+ (volume élevé, reps 10-15)
+        //   Sem 4 : Décharge (récup active, reps 12-15, charges légères)
+        const PERIODIZATION_CYCLE = [
+            { week:1, phase:'hypertrophy', name:'Hypertrophie',     emoji:'💪', reps:'8-12', intensity:75, color:'#10b981', goal:'Volume musculaire modéré' },
+            { week:2, phase:'strength',    name:'Force',            emoji:'🏋️', reps:'3-6',  intensity:90, color:'#ef4444', goal:'Charges lourdes, force pure' },
+            { week:3, phase:'hypertrophy+',name:'Hypertrophie+',    emoji:'🔥', reps:'10-15',intensity:70, color:'#f59e0b', goal:'Volume maximum, congestion' },
+            { week:4, phase:'deload',      name:'Décharge',         emoji:'🌿', reps:'12-15',intensity:55, color:'#06b6d4', goal:'Récupération active' },
+        ];
+
+        function getPeriodizationEnabled() {
+            return localStorage.getItem('fitproPeriodization') === '1';
+        }
+
+        function setPeriodizationEnabled(on) {
+            localStorage.setItem('fitproPeriodization', on ? '1' : '0');
+            if (on && !localStorage.getItem('fitproPeriodizationStart')) {
+                localStorage.setItem('fitproPeriodizationStart', String(Date.now()));
+            }
+            updateHomeStats();
+        }
+
+        function getCurrentPhase() {
+            if (!getPeriodizationEnabled()) return null;
+            const start = parseInt(localStorage.getItem('fitproPeriodizationStart') || String(Date.now()));
+            const weeksSince = Math.floor((Date.now() - start) / (7 * 24 * 60 * 60 * 1000));
+            const weekInCycle = (weeksSince % 4) + 1;
+            return PERIODIZATION_CYCLE.find(p => p.week === weekInCycle);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // ÉCHAUFFEMENTS ADAPTATIFS — Générés selon les muscles à travailler
+        // ═══════════════════════════════════════════════════════════════
+        const WARMUP_EXERCISES = {
+            'Pectoraux': [
+                { name:'Rotations bras', duration:30, type:'mobility', desc:'10× cercles avant + 10× arrière' },
+                { name:'Pompes inclinées légères', duration:45, type:'activation', desc:'15 répétitions lentes' },
+                { name:'Étirement pectoral dynamique', duration:30, type:'mobility', desc:'Bras tendus, ouverture-fermeture' },
+            ],
+            'Dos': [
+                { name:'Rotations épaules', duration:30, type:'mobility', desc:'Cercles vers l\'arrière' },
+                { name:'Tractions à vide / Cat-Cow', duration:45, type:'mobility', desc:'10 répétitions chaque' },
+                { name:'Bird Dog', duration:60, type:'activation', desc:'10 répétitions chaque côté' },
+            ],
+            'Épaules': [
+                { name:'Rotations épaules', duration:30, type:'mobility', desc:'15× avant, 15× arrière' },
+                { name:'Y-T-W au sol', duration:60, type:'activation', desc:'10 répétitions de chaque' },
+                { name:'Élévations latérales sans poids', duration:30, type:'activation', desc:'20 répétitions lentes' },
+            ],
+            'Biceps': [
+                { name:'Rotations poignets', duration:20, type:'mobility', desc:'10× chaque côté' },
+                { name:'Biceps curl à vide', duration:30, type:'activation', desc:'20 répétitions' },
+            ],
+            'Triceps': [
+                { name:'Rotations poignets', duration:20, type:'mobility', desc:'10× chaque côté' },
+                { name:'Triceps stretch', duration:30, type:'mobility', desc:'15 sec chaque bras' },
+                { name:'Extensions triceps à vide', duration:30, type:'activation', desc:'15 répétitions' },
+            ],
+            'Quadriceps': [
+                { name:'Squats à vide', duration:45, type:'activation', desc:'15 répétitions amplitude max' },
+                { name:'Fentes marchées', duration:60, type:'activation', desc:'10 par jambe' },
+                { name:'Étirement quadri dynamique', duration:30, type:'mobility', desc:'Talons aux fesses' },
+            ],
+            'Fessiers': [
+                { name:'Glute Bridges', duration:45, type:'activation', desc:'15 répétitions au sol' },
+                { name:'Clamshells', duration:60, type:'activation', desc:'15 par côté avec élastique' },
+                { name:'Squats à vide larges', duration:30, type:'activation', desc:'15 répétitions' },
+            ],
+            'Ischio-jambiers': [
+                { name:'Soulevés de terre à vide', duration:45, type:'activation', desc:'10 répétitions lentes' },
+                { name:'Étirement ischio dynamique', duration:30, type:'mobility', desc:'Bascules debout' },
+                { name:'Good Mornings à vide', duration:45, type:'activation', desc:'10 répétitions' },
+            ],
+            'Mollets': [
+                { name:'Élévations sur la pointe', duration:45, type:'activation', desc:'20 répétitions' },
+                { name:'Étirement mollet mur', duration:30, type:'mobility', desc:'15 sec chaque' },
+            ],
+            'Abdominaux': [
+                { name:'Cat-Cow', duration:45, type:'mobility', desc:'10 répétitions' },
+                { name:'Dead Bug', duration:60, type:'activation', desc:'10 par côté' },
+                { name:'Plank 30 sec', duration:30, type:'activation', desc:'Tenir 30 secondes' },
+            ],
+            'Obliques': [
+                { name:'Rotations tronc', duration:30, type:'mobility', desc:'15 par côté' },
+                { name:'Side Plank 20 sec', duration:40, type:'activation', desc:'20 sec chaque côté' },
+            ],
+        };
+
+        const WARMUP_GENERAL = [
+            { name:'Marche rapide / vélo', duration:180, type:'cardio', desc:'3 min cardio léger' },
+            { name:'Mouvements articulaires', duration:60, type:'mobility', desc:'Cou, épaules, hanches, genoux' },
+        ];
+
+        function generateAdaptiveWarmup(muscles) {
+            if (!muscles || muscles.length === 0) return [];
+            const warmup = [...WARMUP_GENERAL];
+            const seen = new Set();
+            // Ajouter les échauffements spécifiques pour chaque muscle
+            muscles.forEach(m => {
+                const exos = WARMUP_EXERCISES[m] || [];
+                exos.forEach(e => {
+                    if (!seen.has(e.name)) {
+                        seen.add(e.name);
+                        warmup.push(e);
+                    }
+                });
+            });
+            return warmup;
+        }
+
+        function getWarmupEnabled() {
+            return localStorage.getItem('fitproWarmup') !== '0'; // Activé par défaut
+        }
+
+        function setWarmupEnabled(on) {
+            localStorage.setItem('fitproWarmup', on ? '1' : '0');
+        }
+
+        function showAdaptiveWarmupModal(muscles) {
+            const warmup = generateAdaptiveWarmup(muscles);
+            if (warmup.length === 0) return;
+            const totalSec = warmup.reduce((s, e) => s + e.duration, 0);
+            const totalMin = Math.round(totalSec / 60);
+
+            document.getElementById('warmupModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'warmupModal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.95);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+
+            modal.innerHTML = `
+                <div style="width:100%;max-width:520px;background:linear-gradient(160deg,#0F1014,#0a0d14);border-radius:22px 22px 0 0;max-height:88vh;display:flex;flex-direction:column;border-top:2px solid #f59e0b;">
+                    <div style="width:36px;height:3px;background:#334155;border-radius:99px;margin:10px auto 0;flex-shrink:0;"></div>
+                    <div style="padding:14px 18px 8px;flex-shrink:0;border-bottom:1px solid rgba(245,158,11,0.15);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <div>
+                                <div style="font-size:0.6em;color:#fbbf24;font-weight:900;letter-spacing:2px;margin-bottom:3px;">◈ ÉCHAUFFEMENT ADAPTATIF</div>
+                                <div style="font-size:1em;font-weight:900;color:white;">🔥 Prépare ton corps</div>
+                                <div style="font-size:0.72em;color:#94a3b8;margin-top:3px;">${warmup.length} exercices · ~${totalMin} min · ${muscles.join(' · ')}</div>
+                            </div>
+                            <button onclick="document.getElementById('warmupModal').remove()" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171;width:32px;height:32px;border-radius:50%;font-size:0.9em;cursor:pointer;flex-shrink:0;">✕</button>
+                        </div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:12px 14px 14px;-webkit-overflow-scrolling:touch;">
+                        ${warmup.map((e, i) => {
+                            const c = e.type === 'cardio' ? '#06b6d4' : e.type === 'mobility' ? '#a855f7' : '#22c55e';
+                            const ic = e.type === 'cardio' ? '🏃' : e.type === 'mobility' ? '🤸' : '⚡';
+                            return `<div style="background:#0a0d14;border-left:3px solid ${c};border-radius:10px;padding:11px 13px;margin-bottom:7px;display:flex;align-items:flex-start;gap:11px;">
+                                <div style="font-size:1.4em;flex-shrink:0;">${ic}</div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:0.55em;color:${c};font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;">${e.type === 'cardio' ? 'Cardio' : e.type === 'mobility' ? 'Mobilité' : 'Activation'}</div>
+                                    <div style="font-size:0.88em;font-weight:800;color:white;line-height:1.2;">${i+1}. ${e.name}</div>
+                                    <div style="font-size:0.72em;color:#94a3b8;margin-top:3px;line-height:1.4;">${e.desc}</div>
+                                </div>
+                                <div style="font-size:0.78em;color:${c};font-weight:800;flex-shrink:0;align-self:center;">${e.duration < 60 ? e.duration+'s' : Math.round(e.duration/60)+'min'}</div>
+                            </div>`;
+                        }).join('')}
+                        <button onclick="document.getElementById('warmupModal').remove()" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;border-radius:12px;padding:13px;font-size:0.95em;font-weight:800;cursor:pointer;margin-top:8px;">
+                            ✓ Échauffement terminé — Commencer la séance
+                        </button>
+                    </div>
+                </div>`;
+            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // SUGGESTION HEBDOMADAIRE — Vue panoramique de la semaine
+        // ═══════════════════════════════════════════════════════════════
+        function renderWeeklySuggestionCard() {
+            const phase = getCurrentPhase();
+            const sug = getSmartWorkoutSuggestion();
+            const history = JSON.parse(localStorage.getItem('workoutHistory') || '[]');
+
+            // Sessions de cette semaine
+            const startOfWeek = new Date();
+            startOfWeek.setHours(0,0,0,0);
+            startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+            const thisWeek = history.filter(w => new Date(w.date) >= startOfWeek);
+            const sessionCount = thisWeek.length;
+
+            // Muscles travaillés cette semaine
+            const muscleCount = {};
+            thisWeek.forEach(w => {
+                (w.musclesWorked || w.muscles || []).forEach(m => muscleCount[m] = (muscleCount[m] || 0) + 1);
+            });
+            const allMuscles = ['Pectoraux','Dos','Épaules','Quadriceps','Fessiers','Ischio-jambiers','Abdominaux','Biceps','Triceps','Mollets'];
+            const workedMuscles = Object.keys(muscleCount).sort((a,b) => muscleCount[b] - muscleCount[a]);
+            const neglectedMuscles = allMuscles.filter(m => !muscleCount[m]);
+
+            const recoveryMessage = (() => {
+                if (sessionCount === 0) return 'Aucune séance cette semaine — Démarre fort !';
+                if (sessionCount < 3) return 'Bonne semaine en cours — Encore quelques séances pour finir fort';
+                if (sessionCount < 5) return 'Excellente semaine — Tu es bien régulier';
+                return 'Semaine intense — Pense à la récupération';
+            })();
+
+            return `<div class="card" style="background:linear-gradient(160deg,#0a0e18,#0F1014);border:1px solid rgba(34,197,94,0.15);padding:18px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                    <div>
+                        <div style="font-size:0.6em;color:#4ade80;font-weight:900;letter-spacing:2px;">◈ TA SEMAINE</div>
+                        <div style="font-size:1.05em;font-weight:900;color:white;margin-top:3px;">${sessionCount} séance${sessionCount>1?'s':''} cette semaine</div>
+                    </div>
+                    ${phase ? `
+                        <div style="background:${phase.color}15;border:1.5px solid ${phase.color}40;border-radius:11px;padding:6px 10px;text-align:center;">
+                            <div style="font-size:0.55em;color:${phase.color};font-weight:800;letter-spacing:1px;">SEM. ${phase.week}/4</div>
+                            <div style="font-size:0.78em;font-weight:800;color:white;line-height:1;margin-top:2px;">${phase.emoji} ${phase.name}</div>
+                        </div>` : ''}
+                </div>
+
+                ${phase ? `
+                    <div style="background:${phase.color}08;border:1px solid ${phase.color}20;border-radius:11px;padding:10px 12px;margin-bottom:12px;">
+                        <div style="font-size:0.62em;color:${phase.color};font-weight:800;letter-spacing:1px;margin-bottom:3px;">⚡ PHASE EN COURS</div>
+                        <div style="font-size:0.82em;color:white;font-weight:700;line-height:1.3;">${phase.goal}</div>
+                        <div style="font-size:0.7em;color:#94a3b8;margin-top:4px;display:flex;gap:14px;flex-wrap:wrap;">
+                            <span>📊 ${phase.reps} reps</span>
+                            <span>💪 ${phase.intensity}% intensité</span>
+                        </div>
+                    </div>` : ''}
+
+                <!-- Muscles travaillés -->
+                <div style="font-size:0.6em;color:#94a3b8;font-weight:800;letter-spacing:1px;margin-bottom:8px;">◈ MUSCLES TRAVAILLÉS</div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px;">
+                    ${workedMuscles.length > 0 ? workedMuscles.map(m => `
+                        <span style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:#4ade80;padding:3px 9px;border-radius:99px;font-size:0.7em;font-weight:700;">${m} <span style="opacity:0.7;">×${muscleCount[m]}</span></span>
+                    `).join('') : '<div style="font-size:0.78em;color:#475569;font-style:italic;">Aucun encore cette semaine</div>'}
+                </div>
+
+                ${neglectedMuscles.length > 0 ? `
+                    <div style="font-size:0.6em;color:#f59e0b;font-weight:800;letter-spacing:1px;margin-bottom:8px;">◈ NÉGLIGÉS (à prévoir)</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px;">
+                        ${neglectedMuscles.slice(0, 6).map(m => `
+                            <span style="background:rgba(245,158,11,0.08);border:1px dashed rgba(245,158,11,0.3);color:#fbbf24;padding:3px 9px;border-radius:99px;font-size:0.7em;font-weight:700;">${m}</span>
+                        `).join('')}
+                    </div>` : ''}
+
+                <div style="font-size:0.72em;color:#cbd5e1;line-height:1.5;background:rgba(255,255,255,0.03);border-radius:10px;padding:9px 12px;margin-bottom:10px;">
+                    💡 ${recoveryMessage}
+                </div>
+
+                <!-- Bouton échauffement -->
+                ${getWarmupEnabled() && sug.muscles.length > 0 ? `
+                    <button onclick="showAdaptiveWarmupModal(${JSON.stringify(sug.muscles).replace(/"/g, '&quot;')})" style="width:100%;background:rgba(245,158,11,0.08);border:1.5px dashed rgba(245,158,11,0.3);color:#fbbf24;border-radius:11px;padding:11px;font-size:0.82em;font-weight:800;cursor:pointer;">
+                        🔥 Échauffement adaptatif (${sug.muscles.join(', ')})
+                    </button>` : ''}
+            </div>`;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // PERSISTENCE D'ÉTAT DE SÉANCE — Reprendre où tu en étais
+        // ═══════════════════════════════════════════════════════════════
+        const WORKOUT_STATE_KEY = 'fitproActiveWorkoutState';
+
+        function saveActiveWorkoutState() {
+            try {
+                if (!currentWorkout || currentWorkout._completed) {
+                    localStorage.removeItem(WORKOUT_STATE_KEY);
+                    return;
+                }
+                const state = {
+                    workout: currentWorkout,
+                    exerciseIndex: typeof currentExerciseIndex !== 'undefined' ? currentExerciseIndex : 0,
+                    setIndex: typeof currentSetIndex !== 'undefined' ? currentSetIndex : 0,
+                    startTime: typeof workoutStartTime !== 'undefined' ? workoutStartTime : Date.now(),
+                    savedAt: Date.now(),
+                };
+                localStorage.setItem(WORKOUT_STATE_KEY, JSON.stringify(state));
+            } catch(e) { console.warn('Save workout state failed:', e); }
+        }
+
+        function loadActiveWorkoutState() {
+            try {
+                const raw = localStorage.getItem(WORKOUT_STATE_KEY);
+                if (!raw) {
+                    // Pas de séance en cours : nettoyer aussi les sets résiduels
+                    localStorage.removeItem('fitproSessionSets');
+                    return null;
+                }
+                const state = JSON.parse(raw);
+                // Expire après 24h (sinon la séance est probablement abandonnée)
+                if (Date.now() - state.savedAt > 24 * 60 * 60 * 1000) {
+                    localStorage.removeItem(WORKOUT_STATE_KEY);
+                    localStorage.removeItem('fitproSessionSets');
+                    return null;
+                }
+                return state;
+            } catch(e) { return null; }
+        }
+
+        function clearActiveWorkoutState() {
+            localStorage.removeItem(WORKOUT_STATE_KEY);
+        }
+
+        function hasActiveWorkoutInProgress() {
+            return !!loadActiveWorkoutState();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // SUGGESTION INTELLIGENTE DE SÉANCE — Que faire aujourd'hui ?
+        // ═══════════════════════════════════════════════════════════════
+        function getSmartWorkoutSuggestion() {
+            try {
+                const history = JSON.parse(localStorage.getItem('workoutHistory') || '[]');
+                const recent = history.slice(0, 7); // 7 dernières séances
+
+                // Analyser les muscles travaillés récemment
+                const muscleCount = {};
+                recent.forEach(w => {
+                    (w.musclesWorked || w.muscles || []).forEach(m => {
+                        muscleCount[m] = (muscleCount[m] || 0) + 1;
+                    });
+                });
+
+                // Trouver les muscles négligés (les 2-3 moins travaillés sur 7 jours)
+                const allMuscles = ['Pectoraux','Dos','Épaules','Quadriceps','Fessiers','Abdominaux','Biceps','Triceps'];
+                const neglected = allMuscles
+                    .map(m => ({ m, count: muscleCount[m] || 0 }))
+                    .sort((a, b) => a.count - b.count)
+                    .slice(0, 3);
+
+                // Vérifier la récup : dernière séance hier = repos suggéré pour ces muscles
+                const lastWorkout = recent[0];
+                const hoursSinceLast = lastWorkout ? (Date.now() - new Date(lastWorkout.date).getTime()) / 3600000 : 999;
+                const recentMuscles = lastWorkout ? (lastWorkout.musclesWorked || lastWorkout.muscles || []) : [];
+
+                const suggested = neglected
+                    .filter(({m}) => !recentMuscles.includes(m) || hoursSinceLast > 48)
+                    .map(x => x.m)
+                    .slice(0, 3);
+
+                let reason = '';
+                let intensity = 'Modérée';
+                if (recent.length === 0) {
+                    reason = 'Première séance — entraînement complet recommandé';
+                    intensity = 'Légère';
+                } else if (hoursSinceLast < 24) {
+                    reason = 'Séance récente — focus sur muscles différents';
+                } else if (hoursSinceLast > 72) {
+                    reason = `Cela fait ${Math.round(hoursSinceLast/24)} jours — reprise progressive`;
+                    intensity = 'Modérée';
+                } else if (suggested.length > 0) {
+                    reason = `Ces muscles ont été négligés cette semaine`;
+                } else {
+                    reason = 'Tout est équilibré — choisis ce qui te plait';
+                }
+
+                return {
+                    muscles: suggested.length > 0 ? suggested : allMuscles.slice(0, 3),
+                    reason,
+                    intensity,
+                    hoursSinceLast: Math.round(hoursSinceLast),
+                    historyCount: history.length,
+                };
+            } catch(e) {
+                return { muscles: ['Pectoraux','Dos','Quadriceps'], reason:'Séance équilibrée', intensity:'Modérée', historyCount:0 };
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // BOUTON ACCUEIL INTELLIGENT — Reprendre, suggérer, ou démarrer
+        // ═══════════════════════════════════════════════════════════════
+        function renderSmartStartButton() {
+            const active = loadActiveWorkoutState();
+
+            if (active) {
+                // Séance en cours — bouton "Reprendre"
+                const minutes = Math.round((Date.now() - active.startTime) / 60000);
+                const wkName = active.workout.name || 'Séance';
+                const progress = active.workout.exercises ? Math.round((active.exerciseIndex / active.workout.exercises.length) * 100) : 0;
+                return `<div style="margin-bottom:14px;">
+                    <button onclick="resumeActiveWorkout()" style="
+                        width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;
+                        border-radius:16px;padding:16px 20px;font-size:1.05em;font-weight:800;cursor:pointer;
+                        box-shadow:0 6px 24px rgba(245,158,11,0.4);position:relative;overflow:hidden;
+                        text-align:left;display:flex;align-items:center;gap:12px;">
+                        <div style="font-size:2em;flex-shrink:0;animation:pulse 1.5s infinite;">⏸️</div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:0.62em;letter-spacing:2px;opacity:0.9;font-weight:700;">SÉANCE EN COURS</div>
+                            <div style="font-size:1em;font-weight:900;line-height:1.2;margin-top:2px;">Reprendre ${wkName}</div>
+                            <div style="font-size:0.7em;opacity:0.85;margin-top:3px;">${minutes} min écoulées · ${progress}% complété</div>
+                        </div>
+                        <div style="font-size:1.4em;flex-shrink:0;">▶</div>
+                    </button>
+                    <button onclick="abandonActiveWorkout()" style="width:100%;margin-top:6px;background:transparent;color:#94a3b8;border:none;font-size:0.72em;cursor:pointer;padding:4px;">
+                        ✕ Abandonner cette séance
+                    </button>
+                </div>`;
+            }
+
+            // Pas de séance en cours — suggestion intelligente
+            const sug = getSmartWorkoutSuggestion();
+            const muscleText = sug.muscles.join(' · ');
+            const isFirstTime = sug.historyCount === 0;
+
+            return `<div style="margin-bottom:14px;">
+                <button onclick="startSmartWorkout()" style="
+                    width:100%;background:linear-gradient(135deg,#10b981 0%,#059669 50%,#15803d 100%);color:white;border:none;
+                    border-radius:16px;padding:16px 20px;font-size:1.05em;font-weight:800;cursor:pointer;
+                    box-shadow:0 6px 24px rgba(16,185,129,0.35);position:relative;overflow:hidden;
+                    text-align:left;display:flex;align-items:center;gap:12px;">
+                    <div style="position:absolute;top:0;right:0;width:120px;height:120px;background:radial-gradient(circle,rgba(255,255,255,0.15),transparent 70%);"></div>
+                    <div style="font-size:2.2em;flex-shrink:0;">${isFirstTime ? '🚀' : '⚡'}</div>
+                    <div style="flex:1;min-width:0;position:relative;z-index:1;">
+                        <div style="font-size:0.62em;letter-spacing:2px;opacity:0.9;font-weight:700;">${isFirstTime ? 'PREMIÈRE SÉANCE' : 'SÉANCE RECOMMANDÉE'}</div>
+                        <div style="font-size:1em;font-weight:900;line-height:1.2;margin-top:3px;">${isFirstTime ? 'Commencer maintenant' : 'Démarrer ma séance'}</div>
+                        <div style="font-size:0.7em;opacity:0.85;margin-top:3px;">${muscleText}</div>
+                    </div>
+                    <div style="font-size:1.4em;flex-shrink:0;position:relative;z-index:1;">▶</div>
+                </button>
+                <div style="font-size:0.7em;color:#94a3b8;margin-top:6px;text-align:center;font-style:italic;">${sug.reason}</div>
+            </div>`;
+        }
+
+        function startSmartWorkout() {
+            const sug = getSmartWorkoutSuggestion();
+            // Aller dans l'onglet workouts et pré-cocher les muscles suggérés
+            switchTab('workouts');
+            setTimeout(() => {
+                try {
+                    // Décocher tout d'abord
+                    document.querySelectorAll('input[name="muscleGroup"]').forEach(cb => cb.checked = false);
+                    // Cocher les muscles suggérés
+                    sug.muscles.forEach(m => {
+                        const cb = document.querySelector(`input[name="muscleGroup"][value="${m}"]`);
+                        if (cb) cb.checked = true;
+                    });
+                    showToast(`🎯 Suggestion : ${sug.muscles.join(', ')}`, 'info', 3000);
+                } catch(e) { console.warn('Smart suggestion failed:', e); }
+            }, 200);
+        }
+
+        function resumeActiveWorkout() {
+            const state = loadActiveWorkoutState();
+            if (!state) return;
+            currentWorkout = state.workout;
+            if (typeof currentExerciseIndex !== 'undefined') currentExerciseIndex = state.exerciseIndex || 0;
+            if (typeof currentSetIndex !== 'undefined')      currentSetIndex      = state.setIndex || 0;
+            if (typeof workoutStartTime !== 'undefined')     workoutStartTime     = state.startTime || Date.now();
+
+            // Aller à l'écran d'exercice
+            switchTab('workouts');
+            setTimeout(() => {
+                try {
+                    document.getElementById('exerciseSelection')?.style.setProperty('display', 'none');
+                    const exView = document.getElementById('exerciseView');
+                    if (exView) exView.style.display = 'block';
+                    if (typeof showExercise === 'function') showExercise();
+                    if (typeof startTimer === 'function') startTimer();
+                    showToast('▶ Séance reprise', 'success', 2000);
+                } catch(e) { console.warn('Resume failed:', e); }
+            }, 100);
+        }
+
+        function abandonActiveWorkout() {
+            if (!confirm('Abandonner la séance en cours ? Tous les progrès non sauvegardés seront perdus.')) return;
+            clearActiveWorkoutState();
+            currentWorkout = null;
+            if (typeof renderHomeTab === 'function') renderHomeTab();
+            showToast('Séance abandonnée', 'info', 2000);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // MODE PLEIN ÉCRAN — Fullscreen pendant la séance
+        // ═══════════════════════════════════════════════════════════════
+        function enterFullscreenMode() {
+            try {
+                const el = document.documentElement;
+                if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                else if (el.msRequestFullscreen) el.msRequestFullscreen();
+                document.body.classList.add('workout-fullscreen');
+            } catch(e) {}
+        }
+
+        function exitFullscreenMode() {
+            try {
+                if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                document.body.classList.remove('workout-fullscreen');
+            } catch(e) {}
+        }
+
+        function toggleFullscreenMode() {
+            if (document.body.classList.contains('workout-fullscreen') || document.fullscreenElement) {
+                exitFullscreenMode();
+            } else {
+                enterFullscreenMode();
+            }
+        }
+
+        // Auto-save state toutes les 5 secondes pendant la séance
+        setInterval(() => {
+            if (currentWorkout && !currentWorkout._completed) saveActiveWorkoutState();
+        }, 5000);
         let currentExerciseIndex = 0;
         let selectedWorkoutMode = 'timer'; // NEW: timer, reps, hybrid
 
@@ -7956,6 +8630,219 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const history = performances[exerciseName] || [];
             return history.length > 0 ? history[history.length - 1] : null;
         }
+
+        // ═══════════════════════════════════════════════════════════════
+        // PR DETECTION — Personal Records (max poids, max reps, max volume)
+        // ═══════════════════════════════════════════════════════════════
+        function getExercisePRs(exerciseName) {
+            // exercisePerformances stocke un tableau de sets individuels {date, reps, weight}
+            const performances = getExercisePerformances();
+            const history = performances[exerciseName] || [];
+            if (!Array.isArray(history) || history.length === 0) {
+                return { maxWeight: 0, maxReps: 0, maxVolume: 0, history: [] };
+            }
+
+            let maxWeight = 0, maxReps = 0, maxVolume = 0;
+            history.forEach(set => {
+                if (!set || typeof set !== 'object') return;
+                if (set.warmup) return;
+                const w = parseFloat(set.weight) || 0;
+                const r = parseInt(set.reps) || 0;
+                if (w > maxWeight) maxWeight = w;
+                if (r > maxReps) maxReps = r;
+                const volume = (w || 1) * r;
+                if (volume > maxVolume) maxVolume = volume;
+            });
+            return { maxWeight, maxReps, maxVolume, history };
+        }
+
+        function checkPRBroken(exerciseName, reps, weight) {
+            // Récupérer les PRs historiques (séances antérieures)
+            const prs = getExercisePRs(exerciseName);
+            // Aussi vérifier contre les sets de la séance EN COURS pour éviter les doublons
+            try {
+                const sessionSets = JSON.parse(localStorage.getItem('fitproSessionSets') || '{}');
+                const currSets = sessionSets[exerciseName] || [];
+                currSets.forEach(s => {
+                    if (s.warmup) return;
+                    const w = parseFloat(s.weight) || 0;
+                    const r = parseInt(s.reps) || 0;
+                    if (w > prs.maxWeight) prs.maxWeight = w;
+                    if (r > prs.maxReps) prs.maxReps = r;
+                    const v = (w || 1) * r;
+                    if (v > prs.maxVolume) prs.maxVolume = v;
+                });
+            } catch(e) {}
+
+            const volume = (weight || 1) * (reps || 0);
+            const broken = [];
+            if (weight > prs.maxWeight && weight > 0) broken.push({ type:'weight', value:weight, prev:prs.maxWeight });
+            if (reps > prs.maxReps && reps > 0)       broken.push({ type:'reps',   value:reps,   prev:prs.maxReps });
+            if (volume > prs.maxVolume)               broken.push({ type:'volume', value:volume, prev:prs.maxVolume });
+            return broken;
+        }
+
+        function showPRBanner(prs, exerciseName) {
+            if (!prs || prs.length === 0) return;
+            // Filtrer pour ne montrer que les vraies PRs (pas le 1er essai d'un exo)
+            const filtered = prs.filter(p => p.prev > 0);
+            if (filtered.length === 0) return;
+            const showPrs = filtered;
+            const main = showPrs[0];
+            const labels = { weight:'POIDS MAX', reps:'REPS MAX', volume:'VOLUME MAX' };
+            const units  = { weight:'kg',         reps:' reps',    volume:'kg·reps' };
+
+            const banner = document.createElement('div');
+            banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:10200;pointer-events:none;animation:prBannerSlide 3.5s ease forwards;';
+            banner.innerHTML = `
+                <div style="background:linear-gradient(135deg,#fbbf24,#d97706,#ea580c);
+                            color:white;padding:14px 24px;border-radius:99px;
+                            box-shadow:0 8px 30px rgba(251,191,36,0.6),0 0 0 3px rgba(255,255,255,0.15) inset;
+                            font-weight:900;font-size:0.95em;letter-spacing:0.5px;
+                            display:flex;align-items:center;gap:10px;white-space:nowrap;">
+                    <span style="font-size:1.4em;">🏆</span>
+                    <div>
+                        <div style="font-size:0.65em;opacity:0.9;letter-spacing:2px;line-height:1;">NOUVEAU RECORD</div>
+                        <div style="line-height:1.1;margin-top:2px;">${labels[showPrs[0].type]} : ${showPrs[0].value}${units[showPrs[0].type]}</div>
+                    </div>
+                </div>`;
+            document.body.appendChild(banner);
+            try { vibrate([60, 50, 60, 50, 120]); } catch(e) {}
+            setTimeout(() => banner.remove(), 3500);
+
+            // Marquer dans completedSets pour persister
+            if (completedSets.length > 0) {
+                completedSets[completedSets.length-1]._pr = showPrs.map(p => p.type);
+            }
+            // Marquer aussi dans _currentSessionSets (persistance complète)
+            try {
+                if (_currentSessionSets[exerciseName]) {
+                    const arr = _currentSessionSets[exerciseName];
+                    const last = arr[arr.length - 1];
+                    if (last) {
+                        last._pr = showPrs.map(p => p.type);
+                        localStorage.setItem('fitproSessionSets', JSON.stringify(_currentSessionSets));
+                    }
+                }
+            } catch(e) {}
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // VOLUME LIVE — Compteur total en cours de séance
+        // ═══════════════════════════════════════════════════════════════
+        function getSessionVolume() {
+            // Volume = somme de (poids × reps) pour toutes les séries non-échauffement
+            // Source unique : fitproSessionSets (auto-persisté à chaque set via logSessionSet)
+            let total = 0;
+            let sets  = 0;
+            try {
+                const all = JSON.parse(localStorage.getItem('fitproSessionSets') || '{}');
+                Object.values(all).forEach(exSets => {
+                    (exSets || []).forEach(s => {
+                        if (s.warmup) return;
+                        total += (s.weight || 0) * (s.reps || 0);
+                        sets++;
+                    });
+                });
+            } catch(e) {}
+            return { volume: total, sets };
+        }
+
+        function updateLiveVolumeChip() {
+            const chip = document.getElementById('liveVolumeChip');
+            if (!chip || !currentWorkout) return;
+            const { volume, sets } = getSessionVolume();
+            const total = (currentWorkout.exercises || []).length;
+            const done  = Math.max(0, currentExerciseIndex);
+            const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+            chip.innerHTML = `
+                <div style="display:flex;align-items:center;gap:8px;font-size:0.7em;font-weight:700;color:#cbd5e1;">
+                    <span style="color:#4ade80;">📊</span>
+                    <span><b style="color:white;">${volume >= 1000 ? (volume/1000).toFixed(1)+'t' : Math.round(volume)+'kg'}</b></span>
+                    <span style="opacity:0.4;">|</span>
+                    <span>${sets} sér.</span>
+                    <span style="opacity:0.4;">|</span>
+                    <span>${done}/${total} (${pct}%)</span>
+                </div>`;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // COMPARAISON DERNIÈRE SÉANCE — Indicateur subtil sur chaque set
+        // ═══════════════════════════════════════════════════════════════
+        function getLastSetForExercise(exerciseName, setNum) {
+            // Utiliser fitproLastSets_<hash> qui contient les sets de la DERNIÈRE séance complète
+            try {
+                const key = 'fitproLastSets_' + btoa(encodeURIComponent(exerciseName)).slice(0,20);
+                const raw = localStorage.getItem(key);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (!data || !data.sets) return null;
+                const nonWarmup = data.sets.filter(s => !s.warmup);
+                return nonWarmup[setNum - 1] || null;
+            } catch(e) { return null; }
+        }
+
+        function getComparisonIndicator(exerciseName, setNum, currentReps, currentWeight) {
+            const prev = getLastSetForExercise(exerciseName, setNum);
+            if (!prev) return null;
+            const prevVol = (prev.weight || 1) * (prev.reps || 0);
+            const currVol = (currentWeight || 1) * (currentReps || 0);
+            if (currVol > prevVol)  return { dir:'up',   prev, currVol, prevVol };
+            if (currVol < prevVol)  return { dir:'down', prev, currVol, prevVol };
+            return { dir:'same', prev };
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // SUGGESTION DE CHARGE — Au début d'un nouvel exercice
+        // ═══════════════════════════════════════════════════════════════
+        function getLoadSuggestion(exerciseName) {
+            // Lire les sets de la dernière séance pour cet exercice
+            try {
+                const key = 'fitproLastSets_' + btoa(encodeURIComponent(exerciseName)).slice(0,20);
+                const raw = localStorage.getItem(key);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (!data || !data.sets) return null;
+                const nonWarmup = data.sets.filter(s => !s.warmup);
+                if (nonWarmup.length === 0) return null;
+
+                const avgWeight = nonWarmup.reduce((s,x) => s+(x.weight||0), 0) / nonWarmup.length;
+                const avgReps   = nonWarmup.reduce((s,x) => s+(x.reps||0),   0) / nonWarmup.length;
+                // Le RPE peut être stocké dans le set
+                const lastRPE   = nonWarmup.find(s => s.rpe)?.rpe || null;
+
+                let suggestion;
+                if (lastRPE && lastRPE <= 7) {
+                    suggestion = { action:'increase', weight: Math.round((avgWeight + 2.5) * 2) / 2, reps: Math.round(avgReps),
+                                   reason:'Dernière séance facile', color:'#22c55e' };
+                } else if (lastRPE && lastRPE >= 9) {
+                    suggestion = { action:'decrease', weight: Math.round((avgWeight * 0.9) * 2) / 2, reps: Math.round(avgReps),
+                                   reason:'Dernière séance difficile', color:'#f59e0b' };
+                } else {
+                    suggestion = { action:'maintain', weight: Math.round(avgWeight * 2) / 2, reps: Math.round(avgReps),
+                                   reason:'Charge identique', color:'#3b82f6' };
+                }
+                return suggestion;
+            } catch(e) { return null; }
+        }
+
+        function renderLoadSuggestionChip(exerciseName) {
+            const sug = getLoadSuggestion(exerciseName);
+            if (!sug) return ''; // Premier essai — pas de suggestion
+            const arrow = sug.action === 'increase' ? '↑' : sug.action === 'decrease' ? '↓' : '=';
+            return `<div onclick="document.getElementById('quickWeightInput').value=${sug.weight};document.getElementById('quickRepsInput').value=${sug.reps};showToast('Charge appliquée : ${sug.weight}kg × ${sug.reps}','info',1500);"
+                         style="background:${sug.color}15;border:1px dashed ${sug.color}50;border-radius:10px;
+                                padding:7px 11px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:8px;">
+                <div style="font-size:1em;color:${sug.color};font-weight:900;flex-shrink:0;">${arrow}</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:0.6em;color:${sug.color};font-weight:800;letter-spacing:1px;">💡 SUGGESTION</div>
+                    <div style="font-size:0.78em;color:#e2e8f0;font-weight:700;line-height:1.2;margin-top:1px;">
+                        ${sug.weight}kg × ${sug.reps} reps
+                    </div>
+                </div>
+                <div style="font-size:0.68em;color:#94a3b8;text-align:right;flex-shrink:0;line-height:1.3;font-style:italic;">${sug.reason}</div>
+            </div>`;
+        }
         
         // ══════════════════════════════════════════════
         // GYM MODE — Séries × Reps structuré
@@ -7991,6 +8878,11 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             // 🚀 Surcharge progressive
             const exKey = exercise._baseName || exercise.name;
             if (exKey) showProgressiveOverloadBanner(exKey);
+            // 💡 Suggestion de charge dans la zone tracker
+            const sugContainer = document.getElementById('loadSuggestionContainer');
+            if (sugContainer) sugContainer.innerHTML = exKey ? renderLoadSuggestionChip(exKey) : '';
+            // 📊 Init volume chip
+            updateLiveVolumeChip();
         }
 
         function updateSetIndicator() {
@@ -8000,11 +8892,32 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const isWarmup = currentSetNumber <= warmupSetsCount;
             if (isWarmup) {
                 el.innerHTML = `🔥 Échauffement ${currentSetNumber}/${warmupSetsCount}`;
-                el.style.color = '#d97706';
+                el.style.color = '#fbbf24';
             } else {
                 const workSet = currentSetNumber - warmupSetsCount;
                 el.innerHTML = `📊 Série ${workSet} / ${totalSetsPlanned}`;
-                el.style.color = '#16a34a';
+                el.style.color = '#4ade80';
+            }
+            // Rendre les dots de progression
+            const dotsEl = document.getElementById('setProgressDots');
+            if (dotsEl) {
+                let dotsHTML = '';
+                // Dots d'échauffement (jaune)
+                for (let i = 1; i <= warmupSetsCount; i++) {
+                    const cls = i < currentSetNumber ? 'warmup done' : i === currentSetNumber ? 'current' : 'warmup';
+                    dotsHTML += `<span class="set-progress-dot ${cls}"></span>`;
+                }
+                // Séparateur visuel si échauffement
+                if (warmupSetsCount > 0 && totalSetsPlanned > 0) {
+                    dotsHTML += `<span style="width:1px;background:rgba(148,163,184,0.2);align-self:stretch;margin:0 2px;"></span>`;
+                }
+                // Dots de séries de travail
+                for (let i = 1; i <= totalSetsPlanned; i++) {
+                    const setNum = warmupSetsCount + i;
+                    const cls = setNum < currentSetNumber ? 'done' : setNum === currentSetNumber ? 'current' : 'todo';
+                    dotsHTML += `<span class="set-progress-dot ${cls}"></span>`;
+                }
+                dotsEl.innerHTML = dotsHTML;
             }
         }
 
@@ -8034,11 +8947,23 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
 
             completedSets.push({ reps, weight, warmup: isWarmup, set: currentSetNumber });
 
-            // Historique séries + RPE inline
+            // Historique séries + RPE inline (DOIT être avant la détection PR pour que _pr puisse être attaché)
             const rpeVal = getInlineRPE();
             if (currentEx && currentEx.name) {
                 logSessionSet(currentEx._baseName || currentEx.name, currentSetNumber, reps, weight, isWarmup, rpeVal);
             }
+
+            // 🏆 PR DETECTION — uniquement pour les vraies séries (pas échauffement)
+            if (!isWarmup && currentEx && currentEx.name) {
+                const exKey = currentEx._baseName || currentEx.name;
+                const prsBeaten = checkPRBroken(exKey, reps, weight);
+                if (prsBeaten.length > 0) {
+                    setTimeout(() => showPRBanner(prsBeaten, exKey), 200);
+                }
+            }
+            // 📊 Volume live
+            setTimeout(updateLiveVolumeChip, 50);
+
             // Stocker le RPE pour les suggestions futures
             if (rpeVal && currentEx && currentEx.name && !isWarmup) {
                 const perfs = getExercisePerformances();
@@ -8161,11 +9086,35 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             }
             log.style.display = 'block';
             const unit = useKg ? 'kg' : 'lbs';
+            const exName = currentWorkout?.exercises?.[currentExerciseIndex];
+            const exKey  = exName ? (exName._baseName || exName.name) : null;
+
             log.innerHTML = completedSets.map((s, i) => {
-                const label = s.warmup ? `🔥 Éch.${i+1}` : `✅ Série ${i - completedSets.filter((x,j)=>x.warmup&&j<i).length + 1 - (s.warmup?0:0)}`;
+                const isWarmup = s.warmup;
+                const workSetNum = isWarmup ? 0 : completedSets.filter((x,j)=>!x.warmup&&j<=i).length;
                 const wText = s.weight > 0 ? ` × ${s.weight} ${unit}` : '';
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(255,255,255,0.1);border-radius:8px;margin-bottom:4px;font-size:0.82em;font-weight:600;color:#ffffff;">
-                    <span>${s.warmup ? '🔥 Échauffement' : `✅ Série ${completedSets.filter((x,j)=>!x.warmup&&j<=i).length}`}</span>
+                let label = isWarmup ? '🔥 Échauffement' : `✅ Série ${workSetNum}`;
+                let cmpBadge = '';
+                let prBadge  = '';
+
+                // PR badges
+                if (s._pr && s._pr.length > 0) {
+                    const icons = { weight:'🏆', reps:'💪', volume:'📊' };
+                    prBadge = `<span style="background:linear-gradient(135deg,#fbbf24,#d97706);color:white;padding:1px 6px;border-radius:99px;font-size:0.65em;font-weight:900;letter-spacing:0.5px;">${s._pr.map(t => icons[t] || '🏆').join('')} PR</span>`;
+                }
+
+                // Comparaison avec dernière séance
+                if (!isWarmup && exKey && s.weight > 0) {
+                    const cmp = getComparisonIndicator(exKey, workSetNum, s.reps, s.weight);
+                    if (cmp) {
+                        if (cmp.dir === 'up')      cmpBadge = `<span style="color:#22c55e;font-size:0.72em;font-weight:900;" title="Mieux que ${cmp.prev.weight}kg × ${cmp.prev.reps}">↑</span>`;
+                        else if (cmp.dir === 'down') cmpBadge = `<span style="color:#f87171;font-size:0.72em;font-weight:900;" title="Inférieur à ${cmp.prev.weight}kg × ${cmp.prev.reps}">↓</span>`;
+                        else if (cmp.dir === 'same') cmpBadge = `<span style="color:#94a3b8;font-size:0.7em;font-weight:700;" title="Identique à la dernière fois">=</span>`;
+                    }
+                }
+
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(255,255,255,0.1);border-radius:8px;margin-bottom:4px;font-size:0.82em;font-weight:600;color:#ffffff;gap:6px;">
+                    <span style="display:flex;align-items:center;gap:6px;">${label}${cmpBadge}${prBadge}</span>
                     <span>${s.reps > 0 ? s.reps + ' reps' + wText : 'Complétée'}</span>
                 </div>`;
             }).join('');
@@ -8305,9 +9254,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
 
         // Stockage des sets de la séance en cours (pour historique séries)
         let _currentSessionSets = {}; // { exerciseName: [ {set, reps, weight, isWarmup} ] }
-        function logSessionSet(exerciseName, setNum, reps, weight, isWarmup) {
+        function logSessionSet(exerciseName, setNum, reps, weight, isWarmup, rpe) {
             if (!_currentSessionSets[exerciseName]) _currentSessionSets[exerciseName] = [];
-            _currentSessionSets[exerciseName].push({ set: setNum, reps, weight, isWarmup, ts: Date.now() });
+            // Note: stocker en 'warmup' (sans 'is') pour cohérence avec completedSets
+            const entry = { set: setNum, reps, weight, warmup: !!isWarmup, ts: Date.now() };
+            if (rpe) entry.rpe = rpe;
+            _currentSessionSets[exerciseName].push(entry);
+            // Persister immédiatement pour le calcul live volume/PR
+            try { localStorage.setItem('fitproSessionSets', JSON.stringify(_currentSessionSets)); } catch(e) {}
         }
         function getLastSessionSets(exerciseName) {
             try {
@@ -8324,6 +9278,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 } catch(e) {}
             });
             _currentSessionSets = {};
+            // Nettoyer le live tracking (la séance est finie)
+            try { localStorage.removeItem('fitproSessionSets'); } catch(e) {}
         }
 
         function savePerformance(exerciseName, reps, weight) {
@@ -8988,6 +9944,18 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                           _wName.includes('force') ? 5 : 6;
             const calories = Math.round(_MET * _wKg * (durationInMinutes / 60));
             
+            // Calcul du volume total de la séance (poids × reps cumulés)
+            let sessionVolume = 0;
+            try {
+                const sessionSets = JSON.parse(localStorage.getItem('fitproSessionSets') || '{}');
+                Object.values(sessionSets).forEach(exSets => {
+                    (exSets || []).forEach(s => {
+                        if (s.warmup) return;
+                        sessionVolume += (s.weight || 0) * (s.reps || 0);
+                    });
+                });
+            } catch(e) {}
+
             const historyEntry = {
                 id: Date.now(),
                 date: new Date().toISOString(),
@@ -8997,6 +9965,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 muscles: getSelectedMuscleNames(),
                 musclesWorked: musclesWorked, // For mini-chart
                 calories: calories,
+                volume: sessionVolume,
                 workoutData: workout // Save complete workout for replay
             };
             
@@ -10991,7 +11960,435 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const saved = localStorage.getItem(key);
             try { return saved ? JSON.parse(saved) : []; } catch(e) { return []; }
         }
-        
+
+        // ═══════════════════════════════════════════════════════════════
+        // TEMPLATES PRÉFAITS — Programmes populaires en 1 clic
+        // ═══════════════════════════════════════════════════════════════
+        const WORKOUT_TEMPLATES = [
+            {
+                id: 'ppl',
+                name: 'Push Pull Legs (PPL)',
+                emoji: '💪',
+                description: 'Classique 6 jours/semaine. Push (poussées), Pull (tractions), Legs (jambes) répétés 2× par semaine. Idéal pour hypertrophie.',
+                level: 'Intermédiaire',
+                days: 6,
+                color: '#ef4444',
+                sessions: [
+                    { name: 'Push (Pectoraux/Épaules/Triceps)', muscles: ['Pectoraux','Épaules','Triceps'], duration: 60 },
+                    { name: 'Pull (Dos/Biceps)',                muscles: ['Dos','Biceps'],                  duration: 55 },
+                    { name: 'Legs (Jambes complètes)',          muscles: ['Quadriceps','Fessiers','Ischio-jambiers','Mollets'], duration: 65 },
+                    { name: 'Push (Pectoraux/Épaules/Triceps)', muscles: ['Pectoraux','Épaules','Triceps'], duration: 60 },
+                    { name: 'Pull (Dos/Biceps)',                muscles: ['Dos','Biceps'],                  duration: 55 },
+                    { name: 'Legs (Jambes complètes)',          muscles: ['Quadriceps','Fessiers','Ischio-jambiers','Mollets'], duration: 65 },
+                ],
+            },
+            {
+                id: 'upper_lower',
+                name: 'Upper / Lower Split',
+                emoji: '⚖️',
+                description: 'Programme 4 jours/semaine. Alternance haut du corps / bas du corps avec 1 jour de repos entre. Excellent équilibre fréquence/récupération.',
+                level: 'Intermédiaire',
+                days: 4,
+                color: '#3b82f6',
+                sessions: [
+                    { name: 'Upper Power (force)',     muscles: ['Pectoraux','Dos','Épaules','Triceps','Biceps'], duration: 70 },
+                    { name: 'Lower Power (force)',     muscles: ['Quadriceps','Fessiers','Ischio-jambiers'], duration: 65 },
+                    { name: 'Upper Hypertrophy',       muscles: ['Pectoraux','Dos','Épaules','Triceps','Biceps'], duration: 65 },
+                    { name: 'Lower Hypertrophy',       muscles: ['Quadriceps','Fessiers','Ischio-jambiers','Mollets'], duration: 60 },
+                ],
+            },
+            {
+                id: 'full_body_3x',
+                name: 'Full Body 3×/sem',
+                emoji: '🏋️',
+                description: 'Idéal pour débutants. Tout le corps 3 fois par semaine. Excellent pour apprendre les bases et progresser rapidement.',
+                level: 'Débutant',
+                days: 3,
+                color: '#10b981',
+                sessions: [
+                    { name: 'Full Body A',  muscles: ['Pectoraux','Dos','Quadriceps','Abdominaux'], duration: 50 },
+                    { name: 'Full Body B',  muscles: ['Épaules','Fessiers','Ischio-jambiers','Abdominaux'], duration: 50 },
+                    { name: 'Full Body C',  muscles: ['Pectoraux','Dos','Quadriceps','Biceps','Triceps'], duration: 55 },
+                ],
+            },
+            {
+                id: 'arnold_split',
+                name: 'Arnold Split',
+                emoji: '👑',
+                description: '6 jours/semaine, style Arnold Schwarzenegger. Combinaisons antagonistes (Pec+Dos, Bras, Jambes). Pour avancés cherchant le volume max.',
+                level: 'Avancé',
+                days: 6,
+                color: '#f59e0b',
+                sessions: [
+                    { name: 'Pectoraux + Dos',           muscles: ['Pectoraux','Dos'],         duration: 80 },
+                    { name: 'Épaules + Bras',            muscles: ['Épaules','Biceps','Triceps'], duration: 75 },
+                    { name: 'Jambes',                    muscles: ['Quadriceps','Fessiers','Ischio-jambiers','Mollets'], duration: 75 },
+                    { name: 'Pectoraux + Dos',           muscles: ['Pectoraux','Dos'],         duration: 80 },
+                    { name: 'Épaules + Bras',            muscles: ['Épaules','Biceps','Triceps'], duration: 75 },
+                    { name: 'Jambes',                    muscles: ['Quadriceps','Fessiers','Ischio-jambiers','Mollets'], duration: 75 },
+                ],
+            },
+            {
+                id: 'bro_split',
+                name: 'Bro Split (5 jours)',
+                emoji: '🔥',
+                description: 'Classique bodybuilding. Un groupe musculaire par jour pour focus maximum. Volume élevé par séance.',
+                level: 'Intermédiaire',
+                days: 5,
+                color: '#a855f7',
+                sessions: [
+                    { name: 'Pectoraux',           muscles: ['Pectoraux'],         duration: 60 },
+                    { name: 'Dos',                 muscles: ['Dos'],               duration: 60 },
+                    { name: 'Jambes',              muscles: ['Quadriceps','Fessiers','Ischio-jambiers','Mollets'], duration: 70 },
+                    { name: 'Épaules',             muscles: ['Épaules'],           duration: 55 },
+                    { name: 'Bras (Biceps+Triceps)', muscles: ['Biceps','Triceps'], duration: 55 },
+                ],
+            },
+            {
+                id: 'starting_strength',
+                name: 'Starting Strength',
+                emoji: '⚡',
+                description: 'Programme légendaire pour débutants. Focus sur 5 exercices clés (squat, bench, deadlift, OHP, row). Progression linéaire.',
+                level: 'Débutant',
+                days: 3,
+                color: '#22c55e',
+                sessions: [
+                    { name: 'Séance A',  muscles: ['Quadriceps','Pectoraux','Dos'], duration: 55 },
+                    { name: 'Séance B',  muscles: ['Quadriceps','Épaules','Dos'],   duration: 55 },
+                    { name: 'Séance A',  muscles: ['Quadriceps','Pectoraux','Dos'], duration: 55 },
+                ],
+            },
+            {
+                id: 'home_bodyweight',
+                name: 'Maison (poids du corps)',
+                emoji: '🏠',
+                description: 'Aucun équipement requis. 4 séances/semaine pour maintenir/progresser sans matériel.',
+                level: 'Tous niveaux',
+                days: 4,
+                color: '#06b6d4',
+                sessions: [
+                    { name: 'Haut du corps',  muscles: ['Pectoraux','Épaules','Triceps'], duration: 35 },
+                    { name: 'Bas du corps',   muscles: ['Quadriceps','Fessiers','Ischio-jambiers'], duration: 40 },
+                    { name: 'Tirage + Core',  muscles: ['Dos','Biceps','Abdominaux'],     duration: 35 },
+                    { name: 'Full Body Hiit', muscles: ['Pectoraux','Dos','Quadriceps','Fessiers','Abdominaux'], duration: 30 },
+                ],
+            },
+            {
+                id: 'female_glutes',
+                name: 'Programme Fessiers',
+                emoji: '🍑',
+                description: 'Focus principal sur le développement des fessiers. 4 séances/sem avec fessiers travaillés 3×.',
+                level: 'Tous niveaux',
+                days: 4,
+                color: '#ec4899',
+                sessions: [
+                    { name: 'Fessiers Heavy',  muscles: ['Fessiers','Ischio-jambiers'],   duration: 60 },
+                    { name: 'Haut du corps',   muscles: ['Pectoraux','Dos','Épaules'],    duration: 50 },
+                    { name: 'Fessiers Volume', muscles: ['Fessiers','Quadriceps'],        duration: 55 },
+                    { name: 'Core + Cardio',   muscles: ['Abdominaux','Obliques'],        duration: 35 },
+                ],
+            },
+        ];
+
+        // ═══════════════════════════════════════════════════════════════
+        // PROGRAMMES MULTI-SEMAINES — Progression automatique
+        // ═══════════════════════════════════════════════════════════════
+        const PROGRESSIVE_PROGRAMS = [
+            {
+                id: 'noob_4w',
+                name: '4 semaines · Débutant',
+                emoji: '🌱',
+                description: 'Programme progressif pour débuter. Volume croissant, intensité contrôlée.',
+                weeks: 4,
+                level: 'Débutant',
+                color: '#10b981',
+                progressionType: 'volume', // Augmentation du volume
+                baseTemplate: 'full_body_3x',
+                weeklyConfig: [
+                    { week:1, sets:3, reps:10, rest:90, intensity:'Légère',  note:'Apprentissage des mouvements' },
+                    { week:2, sets:3, reps:12, rest:75, intensity:'Modérée', note:'Volume +20%, charge stable' },
+                    { week:3, sets:4, reps:10, rest:60, intensity:'Modérée', note:'4ème série ajoutée' },
+                    { week:4, sets:4, reps:12, rest:60, intensity:'Soutenue',note:'Volume max, prépa cycle suivant' },
+                ],
+            },
+            {
+                id: 'force_4w',
+                name: '4 semaines · Force pure',
+                emoji: '💥',
+                description: 'Linear Progression style. Charges en hausse chaque semaine, reps en baisse.',
+                weeks: 4,
+                level: 'Intermédiaire',
+                color: '#ef4444',
+                progressionType: 'intensity', // Augmentation de la charge
+                baseTemplate: 'starting_strength',
+                weeklyConfig: [
+                    { week:1, sets:5, reps:8,  rest:120, intensity:'70%', note:'Base, technique propre' },
+                    { week:2, sets:5, reps:6,  rest:150, intensity:'75%', note:'+5kg sur les compounds' },
+                    { week:3, sets:5, reps:5,  rest:180, intensity:'82%', note:'+5kg, repos plus long' },
+                    { week:4, sets:5, reps:3,  rest:210, intensity:'88%', note:'Test 1RM possible' },
+                ],
+            },
+            {
+                id: 'hypertrophy_6w',
+                name: '6 semaines · Hypertrophie',
+                emoji: '🔥',
+                description: 'Bloc complet d\'hypertrophie. Volume élevé, congestion maximale.',
+                weeks: 6,
+                level: 'Intermédiaire',
+                color: '#f59e0b',
+                progressionType: 'volume',
+                baseTemplate: 'ppl',
+                weeklyConfig: [
+                    { week:1, sets:3, reps:12, rest:75, intensity:'70%',  note:'Volume initial' },
+                    { week:2, sets:4, reps:12, rest:75, intensity:'72%',  note:'+1 série par exercice' },
+                    { week:3, sets:4, reps:10, rest:90, intensity:'78%',  note:'Charges +5%, reps légèrement plus bas' },
+                    { week:4, sets:4, reps:8,  rest:90, intensity:'82%',  note:'Pic de volume + intensité' },
+                    { week:5, sets:5, reps:8,  rest:90, intensity:'82%',  note:'+1 série, charges stables' },
+                    { week:6, sets:3, reps:10, rest:75, intensity:'65%',  note:'Décharge, reset pour cycle suivant' },
+                ],
+            },
+            {
+                id: 'cut_8w',
+                name: '8 semaines · Sèche / Maintien',
+                emoji: '⚡',
+                description: 'Volume maintenu, focus densité. Idéal pour préserver le muscle en sèche.',
+                weeks: 8,
+                level: 'Avancé',
+                color: '#06b6d4',
+                progressionType: 'density', // Densité (moins de repos)
+                baseTemplate: 'upper_lower',
+                weeklyConfig: [
+                    { week:1, sets:4, reps:10, rest:90, intensity:'75%', note:'Base + cardio léger' },
+                    { week:2, sets:4, reps:10, rest:75, intensity:'75%', note:'Repos réduit -15s' },
+                    { week:3, sets:4, reps:12, rest:60, intensity:'72%', note:'+2 reps, densité ↑' },
+                    { week:4, sets:5, reps:10, rest:60, intensity:'75%', note:'+1 série' },
+                    { week:5, sets:4, reps:12, rest:45, intensity:'70%', note:'Repos court, congestion' },
+                    { week:6, sets:5, reps:12, rest:45, intensity:'70%', note:'Pic de densité' },
+                    { week:7, sets:4, reps:15, rest:30, intensity:'65%', note:'Endurance musculaire' },
+                    { week:8, sets:3, reps:15, rest:60, intensity:'60%', note:'Décharge finale' },
+                ],
+            },
+        ];
+
+        function showProgressiveProgramsModal() {
+            document.getElementById('progressiveProgsModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'progressiveProgsModal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.93);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+            modal.innerHTML = `
+                <div style="width:100%;max-width:520px;background:#0F1014;border-radius:22px 22px 0 0;max-height:92vh;display:flex;flex-direction:column;border-top:2px solid #a855f7;">
+                    <div style="width:36px;height:3px;background:#334155;border-radius:99px;margin:10px auto 0;flex-shrink:0;"></div>
+                    <div style="padding:14px 18px 8px;flex-shrink:0;border-bottom:1px solid rgba(168,85,247,0.15);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <div>
+                                <div style="font-size:0.6em;color:#c084fc;font-weight:900;letter-spacing:2px;margin-bottom:3px;">◈ PROGRAMMES PROGRESSIFS</div>
+                                <div style="font-size:1em;font-weight:900;color:white;">Plans multi-semaines</div>
+                            </div>
+                            <button onclick="document.getElementById('progressiveProgsModal').remove()" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171;width:32px;height:32px;border-radius:50%;font-size:0.9em;cursor:pointer;flex-shrink:0;">✕</button>
+                        </div>
+                        <div style="font-size:0.72em;color:#94a3b8;margin-top:6px;line-height:1.5;">Progression automatique sur 4 à 8 semaines. Charges, reps et repos évoluent chaque semaine.</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:10px 14px 18px;-webkit-overflow-scrolling:touch;">
+                        ${PROGRESSIVE_PROGRAMS.map(p => `
+                            <div onclick="previewProgressiveProgram('${p.id}')" style="
+                                background:linear-gradient(160deg,${p.color}10,transparent);
+                                border:1.5px solid ${p.color}30;border-radius:14px;
+                                padding:13px;margin-bottom:10px;cursor:pointer;display:flex;align-items:flex-start;gap:12px;">
+                                <div style="font-size:1.8em;flex-shrink:0;filter:drop-shadow(0 0 8px ${p.color}50);">${p.emoji}</div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:0.95em;font-weight:900;color:white;margin-bottom:2px;">${p.name}</div>
+                                    <div style="font-size:0.7em;color:${p.color};font-weight:700;margin-bottom:4px;">${p.weeks} semaines · ${p.level}</div>
+                                    <div style="font-size:0.72em;color:#94a3b8;line-height:1.4;">${p.description}</div>
+                                </div>
+                                <div style="font-size:1em;color:#475569;flex-shrink:0;">›</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        function previewProgressiveProgram(progId) {
+            const p = PROGRESSIVE_PROGRAMS.find(x => x.id === progId);
+            if (!p) return;
+            document.getElementById('progPreviewModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'progPreviewModal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:10101;background:rgba(0,0,0,0.96);display:flex;align-items:center;justify-content:center;padding:18px;';
+            modal.innerHTML = `
+                <div style="width:100%;max-width:440px;background:#0F1014;border-radius:22px;padding:22px;border:2px solid ${p.color}40;max-height:90vh;overflow-y:auto;">
+                    <div style="text-align:center;margin-bottom:14px;">
+                        <div style="font-size:3em;margin-bottom:6px;filter:drop-shadow(0 0 12px ${p.color}80);">${p.emoji}</div>
+                        <div style="font-size:1.15em;font-weight:900;color:white;">${p.name}</div>
+                        <div style="font-size:0.74em;color:${p.color};font-weight:700;margin-top:3px;">${p.weeks} semaines · ${p.level}</div>
+                    </div>
+                    <div style="font-size:0.82em;color:#cbd5e1;line-height:1.5;background:rgba(255,255,255,0.03);border-radius:10px;padding:11px 14px;margin-bottom:14px;">${p.description}</div>
+
+                    <div style="font-size:0.62em;color:#94a3b8;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;text-transform:uppercase;">◈ Progression hebdomadaire</div>
+                    ${p.weeklyConfig.map(w => `
+                        <div style="background:#1a1d24;border-left:3px solid ${p.color};border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+                                <div style="font-size:0.74em;color:${p.color};font-weight:800;">SEMAINE ${w.week}</div>
+                                <div style="font-size:0.7em;color:#cbd5e1;font-weight:700;">${w.intensity}</div>
+                            </div>
+                            <div style="font-size:0.78em;color:white;font-weight:700;">${w.sets}×${w.reps} reps · Repos ${w.rest}s</div>
+                            <div style="font-size:0.68em;color:#94a3b8;margin-top:3px;font-style:italic;">${w.note}</div>
+                        </div>
+                    `).join('')}
+
+                    <div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:10px 12px;margin-top:10px;">
+                        <div style="font-size:0.65em;color:#c084fc;font-weight:800;letter-spacing:1px;margin-bottom:3px;">⚡ Comment ça marche</div>
+                        <div style="font-size:0.72em;color:#cbd5e1;line-height:1.5;">L'app suit ta progression et te suggère les bons sets/reps/repos chaque séance selon la semaine actuelle du programme.</div>
+                    </div>
+
+                    <div style="display:flex;gap:8px;margin-top:14px;">
+                        <button onclick="document.getElementById('progPreviewModal').remove()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#cbd5e1;border-radius:11px;padding:11px;font-size:0.85em;font-weight:700;cursor:pointer;">
+                            Annuler
+                        </button>
+                        <button onclick="activateProgressiveProgram('${p.id}')" style="flex:2;background:linear-gradient(135deg,${p.color},${p.color}cc);border:none;color:white;border-radius:11px;padding:11px;font-size:0.88em;font-weight:800;cursor:pointer;">
+                            🚀 Démarrer ce programme
+                        </button>
+                    </div>
+                </div>`;
+            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        function activateProgressiveProgram(progId) {
+            const p = PROGRESSIVE_PROGRAMS.find(x => x.id === progId);
+            if (!p) return;
+            localStorage.setItem('fitproActiveProgram', JSON.stringify({
+                id: p.id,
+                startDate: Date.now(),
+                weeks: p.weeks,
+            }));
+            // Importer les routines du template de base
+            const base = WORKOUT_TEMPLATES.find(t => t.id === p.baseTemplate);
+            if (base) importTemplate(base.id);
+            document.getElementById('progPreviewModal')?.remove();
+            document.getElementById('progressiveProgsModal')?.remove();
+            showToast(`🚀 ${p.name} activé ! Bonne progression.`, 'success', 3500);
+            updateHomeStats();
+        }
+
+        function getActiveProgressiveProgram() {
+            try {
+                const raw = localStorage.getItem('fitproActiveProgram');
+                if (!raw) return null;
+                const active = JSON.parse(raw);
+                const prog = PROGRESSIVE_PROGRAMS.find(p => p.id === active.id);
+                if (!prog) return null;
+                const weeksSince = Math.floor((Date.now() - active.startDate) / (7 * 24 * 60 * 60 * 1000));
+                if (weeksSince >= prog.weeks) {
+                    // Programme terminé
+                    localStorage.removeItem('fitproActiveProgram');
+                    return null;
+                }
+                const config = prog.weeklyConfig[weeksSince] || prog.weeklyConfig[prog.weeklyConfig.length - 1];
+                return { program: prog, currentWeek: weeksSince + 1, config };
+            } catch(e) { return null; }
+        }
+
+        function showTemplatesModal() {
+            document.getElementById('templatesModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'templatesModal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:10100;background:rgba(0,0,0,0.93);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+            modal.innerHTML = `
+                <div style="width:100%;max-width:520px;background:#0F1014;border-radius:22px 22px 0 0;max-height:92vh;display:flex;flex-direction:column;border-top:2px solid rgba(34,197,94,0.3);">
+                    <div style="width:36px;height:3px;background:#334155;border-radius:99px;margin:10px auto 0;flex-shrink:0;"></div>
+                    <div style="padding:14px 18px 8px;flex-shrink:0;border-bottom:1px solid rgba(34,197,94,0.1);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <div>
+                                <div style="font-size:0.6em;color:#4ade80;font-weight:900;letter-spacing:2px;margin-bottom:3px;">◈ TEMPLATES POPULAIRES</div>
+                                <div style="font-size:1em;font-weight:900;color:white;">Choisir un programme</div>
+                            </div>
+                            <button onclick="document.getElementById('templatesModal').remove()" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171;width:32px;height:32px;border-radius:50%;font-size:0.9em;cursor:pointer;flex-shrink:0;">✕</button>
+                        </div>
+                        <div style="font-size:0.72em;color:#94a3b8;margin-top:6px;line-height:1.5;">8 programmes éprouvés. Tap pour les détails et l'import.</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:10px 14px 18px;-webkit-overflow-scrolling:touch;">
+                        ${WORKOUT_TEMPLATES.map(t => `
+                            <div onclick="previewTemplate('${t.id}')" style="
+                                background:linear-gradient(160deg,${t.color}10,transparent);
+                                border:1.5px solid ${t.color}30;border-radius:14px;
+                                padding:13px;margin-bottom:10px;cursor:pointer;display:flex;align-items:flex-start;gap:12px;">
+                                <div style="font-size:1.8em;flex-shrink:0;filter:drop-shadow(0 0 8px ${t.color}50);">${t.emoji}</div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:0.95em;font-weight:900;color:white;margin-bottom:2px;">${t.name}</div>
+                                    <div style="font-size:0.7em;color:${t.color};font-weight:700;margin-bottom:4px;">${t.days} jours/sem · ${t.level}</div>
+                                    <div style="font-size:0.72em;color:#94a3b8;line-height:1.4;">${t.description}</div>
+                                </div>
+                                <div style="font-size:1em;color:#475569;flex-shrink:0;">›</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        function previewTemplate(templateId) {
+            const t = WORKOUT_TEMPLATES.find(x => x.id === templateId);
+            if (!t) return;
+            document.getElementById('templatePreviewModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'templatePreviewModal';
+            modal.style.cssText = 'position:fixed;inset:0;z-index:10101;background:rgba(0,0,0,0.96);display:flex;align-items:center;justify-content:center;padding:18px;';
+            modal.innerHTML = `
+                <div style="width:100%;max-width:420px;background:#0F1014;border-radius:22px;padding:22px;border:2px solid ${t.color}40;max-height:88vh;overflow-y:auto;">
+                    <div style="text-align:center;margin-bottom:14px;">
+                        <div style="font-size:3em;margin-bottom:6px;filter:drop-shadow(0 0 12px ${t.color}80);">${t.emoji}</div>
+                        <div style="font-size:1.15em;font-weight:900;color:white;">${t.name}</div>
+                        <div style="font-size:0.74em;color:${t.color};font-weight:700;margin-top:3px;">${t.days} jours/sem · ${t.level}</div>
+                    </div>
+                    <div style="font-size:0.82em;color:#cbd5e1;line-height:1.5;background:rgba(255,255,255,0.03);border-radius:10px;padding:11px 14px;margin-bottom:14px;">${t.description}</div>
+
+                    <div style="font-size:0.62em;color:#94a3b8;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;text-transform:uppercase;">◈ Séances de la semaine</div>
+                    ${t.sessions.map((s, i) => `
+                        <div style="background:#1a1d24;border-left:3px solid ${t.color};border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+                            <div style="font-size:0.62em;color:${t.color};font-weight:800;margin-bottom:2px;">JOUR ${i+1}</div>
+                            <div style="font-size:0.85em;color:white;font-weight:700;line-height:1.3;">${s.name}</div>
+                            <div style="font-size:0.66em;color:#94a3b8;margin-top:2px;">⏱️ ${s.duration} min · ${s.muscles.join(' · ')}</div>
+                        </div>
+                    `).join('')}
+
+                    <div style="display:flex;gap:8px;margin-top:14px;">
+                        <button onclick="document.getElementById('templatePreviewModal').remove()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#cbd5e1;border-radius:11px;padding:11px;font-size:0.85em;font-weight:700;cursor:pointer;">
+                            Annuler
+                        </button>
+                        <button onclick="importTemplate('${t.id}')" style="flex:2;background:linear-gradient(135deg,${t.color},${t.color}cc);border:none;color:white;border-radius:11px;padding:11px;font-size:0.88em;font-weight:800;cursor:pointer;">
+                            📥 Importer ce programme
+                        </button>
+                    </div>
+                </div>`;
+            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        function importTemplate(templateId) {
+            const t = WORKOUT_TEMPLATES.find(x => x.id === templateId);
+            if (!t) return;
+            const routines = getRoutines();
+            // Créer une routine pour chaque séance du template
+            t.sessions.forEach((s, i) => {
+                routines.push({
+                    name: `${t.emoji} ${t.name} · Jour ${i+1} (${s.name})`,
+                    muscles: s.muscles,
+                    duration: s.duration,
+                    level: t.level,
+                    fromTemplate: t.id,
+                    created: new Date().toISOString(),
+                });
+            });
+            saveRoutines(routines);
+            document.getElementById('templatePreviewModal')?.remove();
+            document.getElementById('templatesModal')?.remove();
+            showToast(`✅ ${t.sessions.length} séances importées dans tes routines`, 'success', 3000);
+            if (typeof renderRoutinesList === 'function') renderRoutinesList();
+        }
+
         function saveRoutines(routines) {
             const profileId = getCurrentProfileId();
             const key = profileId ? `routines_${profileId}` : 'routines';
@@ -17277,13 +18674,17 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
 
         function startTimer() {
             const exercise = currentWorkout.exercises[currentExerciseIndex];
-            
+
             // Don't start countdown timer if in REPS mode
             if (exercise && exercise.mode === 'reps') {
                 return; // Just display reps, no countdown
             }
-            
+
             if (timerInterval) clearInterval(timerInterval);
+
+            // Activer l'animation de pulse sur le timer
+            const tEl = document.getElementById('timerDisplay');
+            if (tEl) tEl.classList.add('active');
             
             timerInterval = setInterval(() => {
                 if (!isPaused) {
@@ -19818,11 +21219,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             if (!STAT_POINT_STATS.includes(stat)) return false;
             const sp = statPointsLoad();
             amount = amount || 1;
-            if (sp.available < amount) return false;
+            // Allow decrement: amount can be negative
+            if (amount > 0 && sp.available < amount) return false;
+            if (amount < 0 && (sp.allocated[stat] || 0) < Math.abs(amount)) return false;
             sp.available -= amount;
             sp.allocated[stat] = (sp.allocated[stat] || 0) + amount;
             statPointsSave(sp);
-            renderGameTab();
+            // Re-render seulement la carte des points pour préserver le scroll
+            _refreshStatPointsCard();
             return true;
         }
 
@@ -19832,8 +21236,27 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             sp.available += totalAllocated;
             sp.allocated = {STR:0,AGI:0,VIT:0,END:0,PER:0,SEN:0};
             statPointsSave(sp);
-            renderGameTab();
+            _refreshStatPointsCard();
             showToast('Points de stats réinitialisés.','info',2000);
+        }
+
+        function _refreshStatPointsCard() {
+            const oldCard = document.getElementById('statPointsCard');
+            if (!oldCard) {
+                // Fallback : si la carte n'existe pas, full render
+                if (typeof renderGameTab === 'function') renderGameTab();
+                return;
+            }
+            // Calculer le niveau actuel
+            const data = rpgLoad();
+            const totalXP = Object.values(data.muscles||{}).reduce((s,m)=>s+(m.xp||0),0)
+                          + parseInt(localStorage.getItem('fitproRPGLifetimeXP')||'0');
+            const level = rpgLevelFromXP(totalXP);
+            // Créer le nouveau HTML et remplacer la carte en place
+            const tmp = document.createElement('div');
+            tmp.innerHTML = renderStatPointsCard(level);
+            const newCard = tmp.firstElementChild;
+            if (newCard) oldCard.replaceWith(newCard);
         }
 
         function renderStatPointsCard(profileLevel) {
@@ -19844,7 +21267,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const hasPoints = spFresh.available > 0;
             const totalAllocated = Object.values(spFresh.allocated).reduce((a,b)=>a+b,0);
 
-            return `<div class="card" style="background:linear-gradient(160deg,#080c14,#0d1220);border:1.5px solid ${hasPoints?'rgba(245,158,11,0.45)':'rgba(255,255,255,0.06)'};${hasPoints?'box-shadow:0 0 20px rgba(245,158,11,0.12);':''}">
+            return `<div id="statPointsCard" class="card" style="background:linear-gradient(160deg,#080c14,#0d1220);border:1.5px solid ${hasPoints?'rgba(245,158,11,0.45)':'rgba(255,255,255,0.06)'};${hasPoints?'box-shadow:0 0 20px rgba(245,158,11,0.12);':''}">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                     <div>
                         <div style="font-size:0.58em;color:rgba(245,158,11,0.6);font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-bottom:2px;">◈ Points de Stats</div>
@@ -20665,6 +22088,10 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             clearInterval(timerInterval);
             releaseWakeLock();
             if (currentWorkout) currentWorkout._completed = true;
+            clearActiveWorkoutState(); // Nettoyer l'état de séance persisté
+            exitFullscreenMode(); // Sortir du plein écran
+            // Sauvegarder une copie des séries AVANT le nettoyage par saveSessionSets
+            window._completedSessionSets = JSON.parse(JSON.stringify(_currentSessionSets || {}));
             saveSessionSets(); // Persister l'historique des séries
             
             // Vibration célébration
@@ -20757,25 +22184,24 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const kcal = Math.round(MET * weightKg * (totalMinutes / 60));
             document.getElementById('completionCalories').textContent = kcal;
 
-            // Volume total (séries × reps × poids)
+            // Volume total (séries × reps × poids) — basé sur les séries de CETTE séance
             let totalVolume = 0;
+            let totalSets = 0;
             const volDiv = document.getElementById('completionVolume');
             const volVal = document.getElementById('completionVolumeValue');
             try {
-                const perfHistory = JSON.parse(localStorage.getItem('exercisePerformance') || '{}');
-                realExercises.forEach(ex => {
-                    const perf = perfHistory[ex.name];
-                    if (perf && perf.history && perf.history.length > 0) {
-                        const last = perf.history[perf.history.length - 1];
-                        if (last && last.reps && last.weight) {
-                            totalVolume += (last.reps * last.weight);
-                        }
-                    }
+                const sessionSets = window._completedSessionSets || {};
+                Object.values(sessionSets).forEach(exSets => {
+                    (exSets || []).forEach(s => {
+                        if (s.warmup) return;
+                        totalVolume += (s.weight || 0) * (s.reps || 0);
+                        totalSets++;
+                    });
                 });
             } catch(e) {}
             if (totalVolume > 0 && volDiv && volVal) {
                 const unit = useKg ? 'kg' : 'lbs';
-                volVal.textContent = totalVolume.toLocaleString() + ' ' + unit;
+                volVal.textContent = totalVolume.toLocaleString() + ' ' + unit + ' (' + totalSets + ' séries)';
                 volDiv.style.display = 'block';
             }
 
@@ -20794,6 +22220,67 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     `<span style="background:rgba(255,255,255,0.18);color:white;padding:3px 10px;border-radius:20px;font-size:0.82em;font-weight:600;border:1px solid rgba(255,255,255,0.25);">${m}</span>`
                 ).join('');
                 musclesDiv.style.display = 'block';
+            }
+
+            // 🏆 PRs battus pendant cette séance
+            try {
+                const allPRs = [];
+                const sessionSets = window._completedSessionSets || {};
+                Object.entries(sessionSets).forEach(([exName, sets]) => {
+                    const seenTypes = new Set();
+                    (sets || []).forEach(s => {
+                        if (s.warmup || !s._pr) return;
+                        s._pr.forEach(type => {
+                            if (seenTypes.has(type)) return;
+                            seenTypes.add(type);
+                            allPRs.push({ exercise: exName, type, weight: s.weight, reps: s.reps });
+                        });
+                    });
+                });
+                const prsDiv = document.getElementById('completionPRs');
+                const prsList = document.getElementById('completionPRsList');
+                if (allPRs.length > 0 && prsDiv && prsList) {
+                    const labels = { weight:'🏆 Poids max', reps:'💪 Reps max', volume:'📊 Volume max' };
+                    prsList.innerHTML = allPRs.slice(0, 5).map(pr =>
+                        `<div style="font-size:0.82em;color:white;font-weight:600;padding:4px 0;">${labels[pr.type] || '🏆 PR'} : <b>${pr.exercise}</b> — ${pr.weight}kg × ${pr.reps}</div>`
+                    ).join('');
+                    prsDiv.style.display = 'block';
+                }
+            } catch(e) {}
+
+            // 🎯 Verdict de séance (intensité ressentie automatique)
+            const verdictEl = document.getElementById('completionVerdict');
+            if (verdictEl && totalVolume > 0) {
+                try {
+                    // Comparer avec la moyenne des 5 dernières séances
+                    const history = (typeof getWorkoutHistory === 'function') ? getWorkoutHistory().slice(0, 5) : [];
+                    let avgVolume = 0;
+                    let hasHistory = false;
+                    if (history.length >= 2) {
+                        const volumes = history.slice(0, -1).map(w => w.volume || 0).filter(v => v > 0);
+                        if (volumes.length > 0) {
+                            avgVolume = volumes.reduce((a,b)=>a+b,0) / volumes.length;
+                            hasHistory = true;
+                        }
+                    }
+                    let verdict, emoji, color;
+                    if (!hasHistory) {
+                        verdict = 'Première séance enregistrée !'; emoji = '🎉'; color = '#4ade80';
+                    } else if (totalVolume > avgVolume * 1.15) {
+                        verdict = 'Séance exceptionnelle — bien au-dessus de ta moyenne'; emoji = '🔥'; color = '#fbbf24';
+                    } else if (totalVolume > avgVolume * 0.95) {
+                        verdict = 'Bonne séance, dans ta moyenne'; emoji = '💪'; color = '#4ade80';
+                    } else if (totalVolume > avgVolume * 0.75) {
+                        verdict = 'Séance plus légère que d\'habitude'; emoji = '😌'; color = '#06b6d4';
+                    } else {
+                        verdict = 'Séance courte — récupération possible ?'; emoji = '🌿'; color = '#94a3b8';
+                    }
+                    verdictEl.innerHTML = `<div style="background:${color}15;border:1px solid ${color}40;border-radius:12px;padding:11px 14px;text-align:center;">
+                        <div style="font-size:1.5em;margin-bottom:3px;">${emoji}</div>
+                        <div style="font-size:0.85em;color:white;font-weight:700;">${verdict}</div>
+                    </div>`;
+                    verdictEl.style.display = 'block';
+                } catch(e) {}
             }
 
             // ── COMPARAISON STATS CÉLÉBRITÉ ───────────────────────────
@@ -23354,6 +24841,12 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             if (qEl) qEl.textContent = stats.workouts || 0;
             if (sEl) sEl.textContent = (stats.streak || 0) + '🔥';
             if (mEl) mEl.textContent = stats.minutes || 0;
+            // 🧠 Bouton intelligent
+            const smartEl = document.getElementById('smartStartContainer');
+            if (smartEl) smartEl.innerHTML = renderSmartStartButton();
+            // 📅 Suggestion hebdomadaire
+            const weekSugEl = document.getElementById('weeklySuggestionCard');
+            if (weekSugEl) weekSugEl.innerHTML = renderWeeklySuggestionCard();
             // 📊 Refresh dashboard
             updateHomeDashboard();
             // 🎯 Weekly challenge

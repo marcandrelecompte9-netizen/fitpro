@@ -681,10 +681,9 @@ function renderAdventureTab() {
     const container = document.getElementById('adventureContainer');
     if (!container) return;
     if (!getAdventureEnabled()) { container.innerHTML = renderAdventureDisabled(); return; }
+    // Équipement et inventaire accessibles via le modal (bouton en haut)
     container.innerHTML = renderHunterCard()
-        + (typeof renderChallengeSection==='function' ? renderChallengeSection() : '')
-        + renderEquipmentPanel()
-        + renderInventoryPanel();
+        + (typeof renderChallengeSection==='function' ? renderChallengeSection() : '');
     if (typeof startChallengeTimer==='function') startChallengeTimer();
 }
 
