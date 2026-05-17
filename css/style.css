@@ -121,7 +121,7 @@
         .workout-meta {
             display: flex;
             gap: 20px;
-            color: #666;
+            color: #94a3b8;
             font-size: 1em;
         }
 
@@ -150,7 +150,7 @@
 
         .btn-secondary {
             background: #e0e0e0;
-            color: #333;
+            color: #1e293b;
         }
 
         .stats {
@@ -370,7 +370,7 @@
         .exercise-title {
             font-size: 1.2em;
             font-weight: bold;
-            color: #333;
+            color: #1e293b;
             margin-bottom: 8px;
         }
 
@@ -421,7 +421,7 @@
         }
 
         .exercise-description {
-            color: #666;
+            color: #94a3b8;
             font-size: 0.95em;
             line-height: 1.5;
             margin-bottom: 12px;
@@ -431,10 +431,21 @@
             display: flex;
             gap: 15px;
             font-size: 0.85em;
-            color: #888;
+            color: #cbd5e1;
+            font-weight: 600;
             margin-top: 10px;
             padding-top: 10px;
-            border-top: 1px solid #e0e0e0;
+            border-top: 1px solid rgba(34,197,94,0.15);
+        }
+
+        .exercise-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        body.dark-mode .exercise-meta {
+            color: #e2e8f0 !important;
         }
 
         /* Workout Session Styles */
@@ -630,30 +641,31 @@
 
         /* Dark Mode Styles */
         body.dark-mode {
-            background: #0a0a0a;
-            color: #f1f5f9;
+            background: var(--surface-bg);
+            color: var(--text-primary);
         }
 
         body.dark-mode .header h1 {
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            background: linear-gradient(135deg, var(--color-primary-glow) 0%, var(--color-primary-light) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
         body.dark-mode .header p {
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         body.dark-mode .card {
-            background: #141414;
-            color: #f1f5f9;
-            box-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 4px 16px rgba(0,0,0,0.4);
+            background: var(--surface-card);
+            color: var(--text-primary);
+            box-shadow: var(--shadow-card);
+            border: 1px solid var(--border-divider);
         }
 
         body.dark-mode [data-location-id]:not(.loc-active) {
             background: #1c1c1c !important;
-            border-color: #2a2a2a !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode [data-location-id]:not(.loc-active) [data-loc-text] {
             color: #e2e8f0 !important;
@@ -678,7 +690,7 @@
         body.dark-mode .workout-card {
             background: #1c1c1c;
             color: #f1f5f9;
-            border-color: #2a2a2a;
+            border-color: #1e293b;
         }
 
         body.dark-mode .modal-content {
@@ -695,7 +707,7 @@
         body.dark-mode select {
             background: #1c1c1c;
             color: #f1f5f9;
-            border-color: #2a2a2a;
+            border-color: #1e293b;
         }
 
         body.dark-mode .exercise-description-box,
@@ -801,7 +813,7 @@
         .badge-name {
             font-size: 1.1em;
             font-weight: bold;
-            color: #333;
+            color: #1e293b;
             margin-bottom: 5px;
         }
 
@@ -811,11 +823,11 @@
 
         .badge-description {
             font-size: 0.85em;
-            color: #666;
+            color: #94a3b8;
         }
 
         body.dark-mode .badge-description {
-            color: #b0b0b0;
+            color: #94a3b8;
         }
 
         .badge-progress {
@@ -842,8 +854,8 @@
         }
 
         body.dark-mode .calendar-day {
-            background: #222328;
-            border-color: #2E2F35;
+            background: #1e293b;
+            border-color: #1e293b;
         }
 
         .calendar-day.has-workout {
@@ -897,7 +909,7 @@
         }
 
         body.dark-mode .history-item {
-            background: #222328;
+            background: #1e293b;
         }
 
         .history-item:hover {
@@ -936,11 +948,11 @@
             display: flex;
             gap: 15px;
             font-size: 0.9em;
-            color: #666;
+            color: #94a3b8;
         }
 
         body.dark-mode .history-item-stats {
-            color: #b0b0b0;
+            color: #94a3b8;
         }
 
         .history-item-actions {
@@ -968,8 +980,8 @@
         }
 
         body.dark-mode .favorite-workout-card {
-            background: #222328;
-            border-color: #2E2F35;
+            background: #1e293b;
+            border-color: #1e293b;
         }
 
         .favorite-workout-card:hover {
@@ -991,11 +1003,11 @@
 
         .favorite-workout-meta {
             font-size: 0.9em;
-            color: #666;
+            color: #94a3b8;
         }
 
         body.dark-mode .favorite-workout-meta {
-            color: #b0b0b0;
+            color: #94a3b8;
         }
 
         .delete-favorite-btn {
@@ -1023,9 +1035,9 @@
         }
 
         body.dark-mode .graph-tab-btn {
-            background: #222328 !important;
-            color: #b0b0b0 !important;
-            border-color: #2E2F35 !important;
+            background: #1e293b !important;
+            color: #94a3b8 !important;
+            border-color: #1e293b !important;
         }
 
         .graph-tab-btn.active {
@@ -1035,7 +1047,7 @@
         }
 
         body.dark-mode #graphContainer {
-            background: #222328;
+            background: #1e293b;
         }
 
         .bar-chart-container {
@@ -1066,11 +1078,11 @@
             text-align: center;
             margin-top: 10px;
             font-size: 0.9em;
-            color: #666;
+            color: #94a3b8;
         }
 
         body.dark-mode .bar-chart-label {
-            color: #b0b0b0;
+            color: #94a3b8;
         }
 
         .bar-chart-value {
@@ -1129,8 +1141,8 @@
         }
 
         body.dark-mode .feedback-btn {
-            background: #222328;
-            border-color: #2E2F35;
+            background: #1e293b;
+            border-color: #1e293b;
             color: #e0e0e0;
         }
 
@@ -1173,7 +1185,7 @@
         }
 
         body.dark-mode .exercise-detail-card {
-            background: #222328;
+            background: #1e293b;
         }
 
         .exercise-detail-card h4 {
@@ -1193,11 +1205,11 @@
 
         .exercise-detail-card li {
             margin: 5px 0;
-            color: #666;
+            color: #94a3b8;
         }
 
         body.dark-mode .exercise-detail-card li {
-            color: #b0b0b0;
+            color: #94a3b8;
         }
 
         /* Fitness Index Slider */
@@ -1372,17 +1384,17 @@
         }
 
         body.dark-mode .exercise-result-item div {
-            color: #b0b0b0;
+            color: #94a3b8;
         }
 
         body.dark-mode #exerciseSearch {
-            background: #222328;
+            background: #1e293b;
             color: #e0e0e0;
-            border-color: #2E2F35;
+            border-color: #1e293b;
         }
 
         body.dark-mode #exerciseSearch::placeholder {
-            color: #888;
+            color: #cbd5e1;
         }
 
         /* Exercise Progress List */
@@ -1407,7 +1419,7 @@
             padding: 12px;
             margin-bottom: 8px;
             border-radius: 10px;
-            background: #222328;
+            background: #1e293b;
             border: 1px solid #2E2F35;
             transition: all 0.3s;
             position: relative;
@@ -1578,7 +1590,7 @@
         .equipment-name {
             font-size: 1.1em;
             font-weight: bold;
-            color: #333;
+            color: #1e293b;
             margin-bottom: 8px;
         }
 
@@ -1588,7 +1600,7 @@
 
         .equipment-count {
             font-size: 0.9em;
-            color: #666;
+            color: #94a3b8;
         }
 
         .equipment-item.selected .equipment-count {
@@ -1835,7 +1847,7 @@
         .no-results {
             text-align: center;
             padding: 60px 20px;
-            color: #666;
+            color: #94a3b8;
         }
 
         .exercises-welcome {
@@ -1850,7 +1862,7 @@
         }
 
         .exercises-welcome p {
-            color: #666;
+            color: #94a3b8;
             font-size: 1.1em;
             margin-bottom: 30px;
             line-height: 1.6;
@@ -1902,7 +1914,7 @@
         }
 
         .exercises-stat-label {
-            color: #666;
+            color: #94a3b8;
             margin-top: 5px;
         }
 
@@ -1971,7 +1983,7 @@
         
         .exercise-card.blacklisted .exercise-title {
             text-decoration: line-through;
-            color: #999;
+            color: #94a3b8;
         }
         
         .blacklist-toggle {
@@ -2052,13 +2064,13 @@
         .profile-name {
             font-size: 1.3em;
             font-weight: bold;
-            color: #333;
+            color: #1e293b;
             margin-bottom: 5px;
         }
         
         .profile-stats {
             font-size: 0.9em;
-            color: #666;
+            color: #94a3b8;
         }
 
         /* ========================================
@@ -2068,11 +2080,61 @@
 
         /* Variables couleurs */
         :root {
-            --color-primary: #16a34a;
-            --color-primary-dark: #15803d;
-            --color-success: #10b981;
-            --color-warning: #f59e0b;
-            --color-danger: #ef4444;
+            /* ═══ COULEURS PRIMAIRES — VERT AWAKENED ═══ */
+            --color-primary:        #16a34a;   /* Vert principal (boutons, accents) */
+            --color-primary-dark:   #15803d;   /* Vert foncé (hover, gradients) */
+            --color-primary-light:  #22c55e;   /* Vert clair (highlights) */
+            --color-primary-glow:   #4ade80;   /* Vert lumineux (texte sur fond sombre) */
+
+            /* ═══ COULEURS SÉMANTIQUES ═══ */
+            --color-success:        #10b981;
+            --color-warning:        #f59e0b;
+            --color-danger:         #ef4444;
+            --color-danger-light:   #f87171;
+            --color-info:           #06b6d4;
+            --color-accent:         #a855f7;   /* Violet (RPG, classe, magie) */
+            --color-legendary:      #fbbf24;   /* Or (légendaire, prestige) */
+
+            /* ═══ NIVEAUX DE GRIS HARMONISÉS (Slate scale) ═══ */
+            --gray-50:   #f8fafc;
+            --gray-100:  #f1f5f9;
+            --gray-200:  #e2e8f0;   /* Texte principal en dark mode */
+            --gray-300:  #cbd5e1;
+            --gray-400:  #94a3b8;   /* Texte secondaire */
+            --gray-500:  #64748b;   /* Texte tertiaire */
+            --gray-600:  #475569;
+            --gray-700:  #334155;
+            --gray-800:  #1e293b;
+            --gray-900:  #0f172a;
+            --gray-950:  #020617;
+
+            /* ═══ SURFACES DARK MODE ═══ */
+            --surface-bg:        #0a0d14;     /* Fond principal */
+            --surface-card:      #0F1014;     /* Cartes */
+            --surface-elevated:  #1a1d24;     /* Modals, élévations */
+            --surface-input:     #111318;     /* Inputs */
+            --surface-hover:     #1a2535;     /* Hover state */
+
+            /* ═══ BORDURES ═══ */
+            --border-subtle:     rgba(34,197,94,0.10);
+            --border-default:    rgba(34,197,94,0.20);
+            --border-strong:     rgba(34,197,94,0.40);
+            --border-divider:    rgba(255,255,255,0.06);
+
+            /* ═══ TEXTE (sémantique) ═══ */
+            --text-primary:      #e2e8f0;     /* Texte principal */
+            --text-secondary:    #cbd5e1;     /* Texte secondaire */
+            --text-tertiary:     #94a3b8;     /* Texte muet */
+            --text-muted:        #64748b;     /* Texte très muet */
+            --text-disabled:     #475569;     /* Désactivé */
+            --text-accent:       #4ade80;     /* Vert highlight */
+
+            /* ═══ EFFETS ═══ */
+            --glow-primary:      0 0 20px rgba(34,197,94,0.25);
+            --glow-warning:      0 0 20px rgba(245,158,11,0.25);
+            --glow-danger:       0 0 20px rgba(239,68,68,0.25);
+            --shadow-card:       0 4px 16px rgba(0,0,0,0.25);
+            --shadow-elevated:   0 12px 40px rgba(0,0,0,0.5);
         }
 
         /* Fond moderne */
@@ -2526,7 +2588,7 @@
         body.dark-mode .toast {
             background: #1A1B20;
             color: #e2e8f0;
-            border-color: #252830;
+            border-color: #1e293b;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
         }
 
@@ -3352,7 +3414,7 @@
         body.dark-mode .history-item {
             background: #181A1F !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode .history-item * { color: #e2e8f0 !important; }
         body.dark-mode .history-item [style*="color: #"] { color: #cbd5e1 !important; }
@@ -3376,21 +3438,21 @@
 
         body.dark-mode .exercise-card {
             background: #181A1F !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .favorite-workout-card {
             background: #181A1F !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .workout-card {
             background: #181A1F !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode .progress-item {
             background: #181A1F !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .progress-item.completed { background: #14532d !important; }
@@ -3403,7 +3465,7 @@
         body.dark-mode #repsTrackingInputs input {
             background: #181A1F !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
 
         body.dark-mode .card.nav-tabs:not([style]) {
@@ -3419,7 +3481,7 @@
         body.dark-mode textarea {
             background: #181A1F !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
 
         body.dark-mode .swap-card { background: #181A1F !important; }
@@ -3433,12 +3495,12 @@
         /* ── FIN DARK MODE GLOBAL ─────────────────────────────── */
 
         /* ── Textes inline #666 illisibles en dark mode ──────────── */
-        body.dark-mode [style*="color: #666"],
-        body.dark-mode [style*="color:#666"] {
+        body.dark-mode [style*="color: #94a3b8"],
+        body.dark-mode [style*="color: #94a3b8"] {
             color: #94a3b8 !important;
         }
-        body.dark-mode [style*="color: #999"],
-        body.dark-mode [style*="color:#999"] {
+        body.dark-mode [style*="color: #94a3b8"],
+        body.dark-mode [style*="color: #94a3b8"] {
             color: #6b7280 !important;
         }
         /* Cards avec fond transparent (ex. cardio sub-cards) — texte lisible */
@@ -3447,7 +3509,7 @@
             color: #e2e8f0 !important;
         }
         body.dark-mode .card[style*="background: transparent"] p,
-        body.dark-mode .card[style*="background: transparent"] [style*="color: #666"] {
+        body.dark-mode .card[style*="background: transparent"] [style*="color: #94a3b8"] {
             color: #94a3b8 !important;
         }
         /* Section cardio container */
@@ -3468,7 +3530,7 @@
         /* ── CLASSES MANQUANTES sans dark override ──────────────────── */
         body.dark-mode .badge-item {
             background: #1A1B20 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .badge-name { color: #e2e8f0 !important; }
@@ -3478,16 +3540,16 @@
             color: #e2e8f0 !important;
         }
         body.dark-mode .selected-exercise-item {
-            background: #222328 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode .exercise-progress-list {
             background: #1A1B20 !important;
         }
         body.dark-mode .progress-item {
-            background: #222328 !important;
-            border-color: #2E2F35 !important;
+            background: #1e293b !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .progress-item-name  { color: #e2e8f0 !important; }
@@ -3501,9 +3563,9 @@
             border-color: rgba(22,163,74,0.2) !important;
         }
         body.dark-mode .quick-filter-btn {
-            background: #222328 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode .quick-filter-btn.active {
             background: #16a34a !important;
@@ -3511,13 +3573,13 @@
             border-color: #16a34a !important;
         }
         body.dark-mode .exercise-description-box {
-            background: #222328 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .graph-tab-btn {
-            background: #222328 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode .graph-tab-btn.active {
             background: #16a34a !important;
@@ -3525,13 +3587,13 @@
         }
         body.dark-mode .exercise-detail-card,
         body.dark-mode .exercise-progress-item {
-            background: #222328 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         /* Textes #333 inline en dark → blanc */
-        body.dark-mode [style*="color: #333"],
-        body.dark-mode [style*="color:#333"] {
+        body.dark-mode [style*="color: #1e293b"],
+        body.dark-mode [style*="color: #1e293b"] {
             color: #e2e8f0 !important;
         }
         body.dark-mode [style*="color: #555"],
@@ -4128,7 +4190,7 @@
             color: #94a3b8 !important;
         }
         body.dark-mode .nav-tab:hover:not(.active) {
-            background: #252830 !important;
+            background: #1e293b !important;
             color: #4ade80 !important;
         }
         body.dark-mode .nav-tab.active {
@@ -4143,7 +4205,7 @@
 
         /* Bouton secondaire */
         body.dark-mode .btn-secondary {
-            background: #252830 !important;
+            background: #1e293b !important;
             color: #4ade80 !important;
             border: 1px solid #2E2F35 !important;
         }
@@ -4164,7 +4226,7 @@
         body.dark-mode textarea {
             background: #1E2025 !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode input::placeholder { color: #64748b !important; }
 
@@ -4259,7 +4321,7 @@
         body.dark-mode [style*="background:#f5f5f5"],
         body.dark-mode [style*="background: #f3f4f6"],
         body.dark-mode [style*="background:#f3f4f6"] {
-            background: #222328 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
         }
         /* Fonds verts très clairs (e6ffe6, d4f4dd, dcfce7) → dark vert */
@@ -4289,7 +4351,7 @@
         body.dark-mode input[style*="background:#f8fafc"] {
             background: #1A1B20 !important;
             color: #e2e8f0 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         /* Recovery warnings CSS classes */
         body.dark-mode .recovery-warning.medium {
@@ -4325,7 +4387,7 @@
         body.dark-mode .workout-card,
         body.dark-mode .equipment-item {
             background: #1A1B20 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .exercise-card:hover,
@@ -4366,7 +4428,7 @@
 
         /* Accordéons */
         body.dark-mode .accordion-header {
-            background: #252830 !important;
+            background: #1e293b !important;
             color: #4ade80 !important;
         }
         body.dark-mode .accordion-body {
@@ -4375,14 +4437,14 @@
 
         /* Barre de progression */
         body.dark-mode .progress-bar {
-            background: #252830 !important;
+            background: #1e293b !important;
         }
 
         /* Repos — fond vert sombre au lieu de vert criard */
 
         /* Toast */
         body.dark-mode .toast {
-            background: #252830 !important;
+            background: #1e293b !important;
             color: #f1f5f9 !important;
             border: 1px solid #2E2F35 !important;
         }
@@ -4390,7 +4452,7 @@
         /* Weekly plan days */
         body.dark-mode .weekly-plan-day {
             background: #1A1B20 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
         }
         body.dark-mode .weekly-plan-day strong { color: #f1f5f9 !important; }
         body.dark-mode .weekly-plan-day .today {
@@ -4400,18 +4462,18 @@
 
         /* Exercices instructions */
         body.dark-mode .instructions-list li {
-            background: #252830 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
         }
         body.dark-mode .tips-box {
-            background: #252830 !important;
+            background: #1e293b !important;
             color: #e2e8f0 !important;
         }
 
         /* RPE boutons */
         body.dark-mode .rpe-button {
             background: #1A1B20 !important;
-            border-color: #252830 !important;
+            border-color: #1e293b !important;
             color: #e2e8f0 !important;
         }
 
@@ -4529,7 +4591,7 @@
         body.dark-mode #swapModalBox {
             background: #181A1F;
         }
-        body.dark-mode .swap-header { background: #181A1F; border-color: #252830; }
+        body.dark-mode .swap-header { background: #181A1F; border-color: #1e293b; }
         body.dark-mode .swap-card { border-color: #2A2C32; }
         body.dark-mode .swap-card:hover { background: #2A2C32; }
         body.dark-mode .swap-card-name { color: #e2e8f0; }

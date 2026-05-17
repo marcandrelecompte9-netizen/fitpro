@@ -766,21 +766,10 @@ function _getPlaceholderSVG() {
 
 // Crée un <img> en lazy loading
 function _buildLazyImg(src, name, extraStyle) {
-  _initLazyObserver();
-  var placeholder = _getPlaceholderSVG();
-  var baseStyle = 'width:100%;height:100%;object-fit:cover;display:block;background:#0d1220;opacity:0;transition:opacity 0.3s ease;' + (extraStyle || '');
-  // Génère un ID unique pour pouvoir hook après injection
-  var id = 'lz' + Math.random().toString(36).slice(2, 9);
-  // L'observer est branché après que l'élément soit dans le DOM
-  setTimeout(function() {
-    var el = document.getElementById(id);
-    if (el && LAZY_OBSERVER) LAZY_OBSERVER.observe(el);
-    else if (el) { // Fallback sans IntersectionObserver
-      el.src = src;
-      el.style.opacity = '1';
-    }
-  }, 50);
-  return '<img id="' + id + '" src="' + placeholder + '" data-lazy-src="' + src + '" alt="' + (name || '') + '" style="' + baseStyle + '" loading="lazy"/>';
+  // Lazy loading natif du navigateur — fiable et simple
+  var baseStyle = 'width:100%;height:100%;object-fit:cover;display:block;background:#0d1220;' + (extraStyle || '');
+  var safeName = (name || '').replace(/"/g, '&quot;');
+  return '<img src="' + src + '" alt="' + safeName + '" style="' + baseStyle + '" loading="lazy" decoding="async"/>';
 }
 
 function toImgHTML(src, name) {
