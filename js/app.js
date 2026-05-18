@@ -17661,7 +17661,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 const difficultyClass = `difficulty-${exercise.difficulty.toLowerCase().replace('é', 'e')}`;
                 const svgStart = getExerciseVisual(exercise.name, exercise.muscle, 'start');
                 const svgEnd = getExerciseVisual(exercise.name, exercise.muscle, 'end');
-                const _imgSrc = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exercise.name];
+                const _exKey = exercise._baseName || exercise.name;
+                const _imgSrc = window.EXERCISE_IMAGES && (window.EXERCISE_IMAGES[_exKey] || window.EXERCISE_IMAGES[exercise.name]);
                 const _mediaHTML = _imgSrc
                     ? '<div style="width:100%;height:100%;">' + window.buildLazyImg(_imgSrc, exercise.name) + '</div>'
                     : '<div class="exercise-animation"><div class="exercise-svg-container">' + svgStart + '<div class="position-label position-start">Début</div></div><div class="arrow-indicator">→</div><div class="exercise-svg-container">' + svgEnd + '<div class="position-label position-end">Fin</div></div></div>';
@@ -17850,7 +17851,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const difficultyClass = `difficulty-${exercise.difficulty.toLowerCase().replace('é', 'e')}`;
             const svgStart = getExerciseVisual(exercise.name, exercise.muscle, 'start');
             const svgEnd = getExerciseVisual(exercise.name, exercise.muscle, 'end');
-            const _imgSrc2 = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exercise.name];
+            const _exKey2 = exercise._baseName || exercise.name;
+            const _imgSrc2 = window.EXERCISE_IMAGES && (window.EXERCISE_IMAGES[_exKey2] || window.EXERCISE_IMAGES[exercise.name]);
             const _mediaHTML2 = _imgSrc2
                 ? '<div style="width:100%;height:100%;border-radius:12px;overflow:hidden;">' + window.buildLazyImg(_imgSrc2, exercise.name, 'border-radius:12px;') + '</div>'
                 : '<div class="exercise-animation"><div class="exercise-svg-container">' + svgStart + '<div class="position-label position-start">Début</div></div><div class="arrow-indicator">→</div><div class="exercise-svg-container">' + svgEnd + '<div class="position-label position-end">Fin</div></div></div>';
@@ -18446,7 +18448,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             
             const svgStart = getExerciseVisual(exerciseName, muscleGuess, 'start');
             const svgEnd = getExerciseVisual(exerciseName, muscleGuess, 'end');
-            const _imgSrc3 = window.EXERCISE_IMAGES && window.EXERCISE_IMAGES[exerciseName];
+            const _imgKey3 = exercise._baseName || exerciseName;
+            const _imgSrc3 = window.EXERCISE_IMAGES && (window.EXERCISE_IMAGES[_imgKey3] || window.EXERCISE_IMAGES[exerciseName]);
             
             const imagesDiv = document.createElement('div');
             imagesDiv.className = 'exercise-timer-images';

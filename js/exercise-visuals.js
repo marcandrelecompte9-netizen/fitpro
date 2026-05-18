@@ -796,8 +796,12 @@ function _buildLazyImg(src, name, extraStyle) {
   // Lazy loading natif du navigateur — fiable et simple
   var baseStyle = 'width:100%;height:100%;object-fit:cover;display:block;background:#0d1220;' + (extraStyle || '');
   var safeName = (name || '').replace(/"/g, '&quot;');
+  // Encoder l'URL pour les caractères spéciaux (é, è, à, etc.) — encode chaque segment de path
+  var safeSrc = src.split('/').map(function(seg, i) {
+    return i === 0 ? seg : encodeURIComponent(seg).replace(/'/g, '%27');
+  }).join('/');
   // onerror : si l'image ne charge pas, on cache pour ne pas montrer de carré gris cassé
-  return '<img src="' + src + '" alt="' + safeName + '" style="' + baseStyle + '" loading="lazy" decoding="async" onerror="this.style.display=\'none\';this.parentElement&&(this.parentElement.style.display=\'none\')"/>';
+  return '<img src="' + safeSrc + '" alt="' + safeName + '" style="' + baseStyle + '" loading="lazy" decoding="async" onerror="this.style.display=\'none\';this.parentElement&&(this.parentElement.style.display=\'none\')"/>';
 }
 
 function toImgHTML(src, name) {
