@@ -361,6 +361,9 @@
             <!-- ══ SUGGESTION HEBDOMADAIRE ════════════════════════════════ -->
             <div id="weeklySuggestionCard"></div>
 
+            <!-- 📅 Heatmap d'activité (style GitHub) -->
+            <div id="activityHeatmapCard" class="activity-heatmap"></div>
+
             <!-- Fitness Index of the Day -->
             <div class="card" id="fitnessIndexCard" style="padding:20px;">
                 <h3 style="margin-bottom:16px;color:#16a34a;">💪 Indice de forme aujourd'hui</h3>
@@ -3604,6 +3607,13 @@
     <!-- Adventure + Challenge hook -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Nettoyer les anciens états de Boss (feature retirée)
+            try {
+                Object.keys(localStorage).forEach(k => {
+                    if (k.startsWith('rpgBoss_')) localStorage.removeItem(k);
+                });
+            } catch(e) {}
+
             const _origSwitch = window.switchTab;
             window.switchTab = function(tab) {
                 if (_origSwitch) _origSwitch(tab);
@@ -3616,6 +3626,30 @@
             if (typeof initAdventureSystem === 'function') initAdventureSystem();
             if (typeof initChallengeSystem === 'function') initChallengeSystem();
             if (typeof startSystemRandomMessages === 'function') startSystemRandomMessages();
+
+            // 🎯 Activer les micro-interactions (ripple + haptic)
+            if (typeof _initRippleEffect === 'function') _initRippleEffect();
+
+            // 📊 Chart.js — animations premium par défaut
+            if (typeof Chart !== 'undefined' && Chart.defaults) {
+                Chart.defaults.font.family = 'Outfit, system-ui, sans-serif';
+                Chart.defaults.color = '#94a3b8';
+                Chart.defaults.borderColor = 'rgba(74,222,128,0.1)';
+                Chart.defaults.animation.duration = 1200;
+                Chart.defaults.animation.easing = 'easeOutCubic';
+                if (Chart.defaults.plugins && Chart.defaults.plugins.tooltip) {
+                    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.92)';
+                    Chart.defaults.plugins.tooltip.titleColor = '#4ade80';
+                    Chart.defaults.plugins.tooltip.bodyColor = '#e2e8f0';
+                    Chart.defaults.plugins.tooltip.borderColor = 'rgba(74,222,128,0.3)';
+                    Chart.defaults.plugins.tooltip.borderWidth = 1;
+                    Chart.defaults.plugins.tooltip.padding = 12;
+                    Chart.defaults.plugins.tooltip.cornerRadius = 10;
+                    Chart.defaults.plugins.tooltip.titleFont = { weight: 800, size: 13 };
+                    Chart.defaults.plugins.tooltip.bodyFont = { weight: 600, size: 12 };
+                    Chart.defaults.plugins.tooltip.displayColors = false;
+                }
+            }
 
             // Init toggles état (périodisation + échauffement)
             setTimeout(() => {

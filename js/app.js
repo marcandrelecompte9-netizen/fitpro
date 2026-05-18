@@ -51,6 +51,174 @@
             document.getElementById(id+'_cancel').onclick = () => { overlay.remove(); if(onCancel) onCancel(); };
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // 🎯 POLISH HELPERS — Micro-interactions, animations, haptics
+        // ═══════════════════════════════════════════════════════════════
+
+        /** Vibrate the device briefly (no-op if not supported) */
+        function hapticTap(pattern) {
+            try {
+                if (!navigator.vibrate) return;
+                const p = pattern || 15;
+                navigator.vibrate(p);
+            } catch(e) {}
+        }
+        window.hapticTap = hapticTap;
+
+        /**
+         * CountUp animation — anime un nombre de 0 (ou current) à target en duration ms
+         * Usage: countUpTo(element, 127) ou countUpTo('elementId', 127, { duration: 800, suffix: ' kg' })
+         */
+        function countUpTo(elOrId, target, opts) {
+            const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+            if (!el) return;
+            const o = opts || {};
+            const duration = o.duration || 900;
+            const suffix = o.suffix || '';
+            const prefix = o.prefix || '';
+            const decimals = o.decimals || 0;
+            const start = parseFloat(el.dataset.cuLast) || (o.from !== undefined ? o.from : 0);
+            const end = parseFloat(target) || 0;
+            if (start === end) {
+                el.textContent = prefix + end.toFixed(decimals) + suffix;
+                return;
+            }
+            const startTime = performance.now();
+            // Easing out-cubic
+            const ease = t => 1 - Math.pow(1 - t, 3);
+            function tick(now) {
+                const elapsed = now - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const current = start + (end - start) * ease(t);
+                el.textContent = prefix + current.toFixed(decimals) + (decimals ? '' : '').replace(/\.0+$/, '') + suffix;
+                if (t < 1) {
+                    requestAnimationFrame(tick);
+                } else {
+                    el.textContent = prefix + end.toFixed(decimals).replace(/\.0+$/, '') + suffix;
+                    el.dataset.cuLast = end;
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+        window.countUpTo = countUpTo;
+
+        /**
+         * Renders an activity heatmap (GitHub-style) for the last N weeks.
+         * containerId: DOM element to fill
+         * Looks at workoutHistory and colors cells based on workout count per day
+         */
+        function renderActivityHeatmap(containerId, weeks) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            const NB_WEEKS = weeks || 26; // ~6 mois
+            const history = (() => {
+                try { return JSON.parse(localStorage.getItem('workoutHistory') || '[]'); } catch(e) { return []; }
+            })();
+
+            // Count workouts per day (YYYY-MM-DD)
+            const dayCount = {};
+            history.forEach(w => {
+                try {
+                    const d = new Date(w.date);
+                    const key = d.toISOString().slice(0,10);
+                    dayCount[key] = (dayCount[key] || 0) + 1;
+                } catch(e) {}
+            });
+
+            // Calculate grid
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            // Aller au lundi de cette semaine
+            const dayOfWeek = (today.getDay() + 6) % 7; // 0 = lundi
+            const endOfWeek = new Date(today);
+            endOfWeek.setDate(today.getDate() + (6 - dayOfWeek));
+
+            const totalDays = NB_WEEKS * 7;
+            const startDate = new Date(endOfWeek);
+            startDate.setDate(endOfWeek.getDate() - totalDays + 1);
+
+            // Build cells with month labels
+            const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+            const dayNames = ['L','','M','','V','','D'];
+
+            let cellsHTML = '';
+            let monthLabelsHTML = '';
+            let currentMonth = -1;
+
+            for (let i = 0; i < totalDays; i++) {
+                const d = new Date(startDate);
+                d.setDate(startDate.getDate() + i);
+                const key = d.toISOString().slice(0,10);
+                const count = dayCount[key] || 0;
+                let level = 0;
+                if (count >= 4) level = 4;
+                else if (count >= 3) level = 3;
+                else if (count >= 2) level = 2;
+                else if (count >= 1) level = 1;
+
+                const tooltipDate = d.toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+                const isFuture = d > today;
+                const opacity = isFuture ? 'opacity:0.3;' : '';
+                cellsHTML += `<div class="heatmap-cell level-${level}" style="${opacity}" title="${tooltipDate} — ${count} séance${count>1?'s':''}"></div>`;
+            }
+
+            // Day labels column
+            const dayLabelsHTML = dayNames.map(d => `<div>${d}</div>`).join('');
+
+            // Stats
+            const totalWorkouts = history.filter(w => {
+                try {
+                    const d = new Date(w.date);
+                    return d >= startDate && d <= today;
+                } catch(e) { return false; }
+            }).length;
+
+            const activeDays = Object.keys(dayCount).filter(k => {
+                const d = new Date(k);
+                return d >= startDate && d <= today;
+            }).length;
+
+            el.innerHTML = `
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+                    <div>
+                        <div style="font-size:0.6em;color:#4ade80;font-weight:900;letter-spacing:2px;margin-bottom:3px;">◈ ACTIVITÉ</div>
+                        <div style="font-size:0.95em;font-weight:900;color:white;">${totalWorkouts} séance${totalWorkouts>1?'s':''} sur ${NB_WEEKS} semaines</div>
+                        <div style="font-size:0.7em;color:#94a3b8;margin-top:2px;">${activeDays} jour${activeDays>1?'s':''} actif${activeDays>1?'s':''}</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <div class="heatmap-day-labels">${dayLabelsHTML}</div>
+                    <div class="heatmap-grid">${cellsHTML}</div>
+                </div>
+                <div class="heatmap-legend">
+                    <span>Moins</span>
+                    <div class="heatmap-cell level-0"></div>
+                    <div class="heatmap-cell level-1"></div>
+                    <div class="heatmap-cell level-2"></div>
+                    <div class="heatmap-cell level-3"></div>
+                    <div class="heatmap-cell level-4"></div>
+                    <span>Plus</span>
+                </div>
+            `;
+        }
+        window.renderActivityHeatmap = renderActivityHeatmap;
+
+        // Auto-apply ripple class to all buttons globally (after DOM ready)
+        function _initRippleEffect() {
+            document.addEventListener('click', e => {
+                const btn = e.target.closest('button, .btn');
+                if (!btn || btn.disabled) return;
+                if (btn.classList.contains('no-ripple')) return;
+                btn.classList.add('ripple');
+                // Haptic on important buttons
+                if (btn.classList.contains('btn') ||
+                    btn.classList.contains('completeSetBtn') ||
+                    btn.id === 'completeSetBtn') {
+                    hapticTap(15);
+                }
+            }, true);
+        }
+
         function showToast(message, type = 'success', duration = 3000) {
             const container = document.getElementById('toastContainer');
             if (!container) return;
@@ -9935,17 +10103,23 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 durationInMinutes = Math.round((Date.now() - workoutStartTime) / 60000);
             }
             
-            // Calculate muscles worked and their volume
-            const musclesWorked = [];
+            // Calculate muscles worked (déduplication automatique)
+            const musclesSet = new Set();
             workout.exercises.forEach(ex => {
-                if (!ex.isRest && !ex.isInfo) {
-                    const exerciseName = typeof ex === 'string' ? ex : ex.name;
-                    const exerciseData = exerciseDatabase.find(e => e.name === exerciseName);
-                    if (exerciseData && exerciseData.muscle) {
-                        musclesWorked.push(exerciseData.muscle);
-                    }
+                if (ex.isRest || ex.isInfo) return;
+                // Source 1 : muscle déjà attaché à l'exercice
+                if (ex.muscle) {
+                    musclesSet.add(ex.muscle);
+                    return;
+                }
+                // Source 2 : lookup dans exerciseDatabase via _baseName ou name
+                const exerciseName = typeof ex === 'string' ? ex : (ex._baseName || ex.name);
+                const exerciseData = exerciseDatabase.find(e => e.name === exerciseName);
+                if (exerciseData && exerciseData.muscle) {
+                    musclesSet.add(exerciseData.muscle);
                 }
             });
+            const musclesWorked = Array.from(musclesSet);
             
             // Calories précises : MET × poids_kg × heures (même formule que l'écran de fin)
             const _prof = getUserProfile();
@@ -20028,7 +20202,6 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const unlockedSkills = rpgGetUnlockedSkills();
             const prestigeLevel  = rpgGetPrestigeLevel();
             const currentClass   = rpgGetClass();
-            const bossState      = rpgGetBossState();
 
             // ── Quêtes ──────────────────────────────────────────────
             let quests = [], dailyQuests = [], dailyTimeLeft = '';
@@ -21190,7 +21363,6 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             { id:'rank_s',          name:'Chasseur S',          emoji:'🟨', desc:'Atteindre le rang S',                   check:(s,data)=>{const xp=Object.values(data.muscles).reduce((a,m)=>a+m.xp,0);return rpgGetRank(xp).id==='S'||['SS','SSS'].includes(rpgGetRank(xp).id);} },
             { id:'rank_sss',        name:'Légende Absolue',     emoji:'💠', desc:'Atteindre le rang SSS',                 check:(s,data)=>{const xp=Object.values(data.muscles).reduce((a,m)=>a+m.xp,0);return rpgGetRank(xp).id==='SSS';} },
             { id:'dungeon_1',       name:'Explorateur',         emoji:'🗺️', desc:'Compléter un donjon',                   check:()=>RPG_DUNGEONS.some(d=>rpgGetDungeonStatus(d.id).lastCompleted) },
-            { id:'boss_1',          name:'Tueur de Boss',       emoji:'🗡️', desc:'Vaincre le boss de la semaine',          check:()=>rpgGetBossState().defeated },
             { id:'prestige_1',      name:'Renaissance',         emoji:'⭐', desc:'Atteindre le Prestige 1',               check:()=>rpgGetPrestigeLevel()>=1 },
             { id:'loot_epic',       name:'Chanceux',            emoji:'🎲', desc:'Ouvrir un coffre Épique',               check:()=>JSON.parse(localStorage.getItem('fitproLootBadges')||'[]').includes('chest_epic') },
             { id:'no_decay_week',   name:'Régulier',            emoji:'📊', desc:'Aucun muscle en déclin pendant 1 semaine', check:(s,data)=>Object.values(data.muscles).length>0&&Object.values(data.muscles).every(m=>(new Date()-new Date(m.lastTrained||0))/86400000<7) },
@@ -22198,9 +22370,16 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             
             // ── Remplir l'écran de complétion enrichi ──
             const _setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-            _setText('completionTime', totalMinutes);
+            // 🎬 Animation CountUp pour effet "Apple Health"
+            const _countUp = (id, val) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.dataset.cuLast = 0; // Force start from 0
+                setTimeout(() => countUpTo(el, val, { duration: 1200 }), 300);
+            };
+            _countUp('completionTime', totalMinutes);
             const realExercises = currentWorkout.exercises.filter(ex => !ex.isRest && !ex.isInfo);
-            _setText('completionExercises', realExercises.length);
+            _countUp('completionExercises', realExercises.length);
 
             // Calories précises : formule MET × poids_kg × heures
             const profile = getUserProfile();
@@ -22213,7 +22392,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                         wName.includes('mobility') || wName.includes('récup') || wName.includes('stretch') || wName.includes('étir') ? 3 :
                         wName.includes('force') || wName.includes('strength') ? 5 : 6;
             const kcal = Math.round(MET * weightKg * (totalMinutes / 60));
-            _setText('completionCalories', kcal);
+            _countUp('completionCalories', kcal);
 
             // Volume total (séries × reps × poids) — basé sur les séries de CETTE séance
             let totalVolume = 0;
@@ -22367,15 +22546,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     const dq = rpgGetDailyQuests();
                     dq.forEach(q => { if (q.done) rpgAwardDailyQuest(q.id, q.xpReward); });
                 }, 600);
-                // Attaquer le boss de la semaine
-                setTimeout(() => {
-                    if (currentWorkout) {
-                        const trainedMuscles = [...new Set((currentWorkout.exercises||[]).map(ex => {
-                            const db = exerciseDatabase.find(e=>e.name===ex.name); return db?.muscle;
-                        }).filter(Boolean))];
-                        rpgDamageBoss(trainedMuscles);
-                    }
-                }, 1000);
+                // Système de Boss désactivé — retiré du jeu
                 // Vérifier les exploits
                 setTimeout(rpgCheckAchievements, 400);
 
@@ -24869,15 +25040,22 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const sEl = document.getElementById('homeStatStreak');
             const mEl = document.getElementById('homeStatMinutes');
             const qQuote = document.getElementById('homeQuote');
-            if (qEl) qEl.textContent = stats.workouts || 0;
-            if (sEl) sEl.textContent = (stats.streak || 0) + '🔥';
-            if (mEl) mEl.textContent = stats.minutes || 0;
+            // 🔢 CountUp pour stats — animation premium 0 → target
+            if (qEl) countUpTo(qEl, stats.workouts || 0, { duration: 800 });
+            if (sEl) countUpTo(sEl, stats.streak || 0, { duration: 800, suffix: '🔥' });
+            if (mEl) countUpTo(mEl, stats.minutes || 0, { duration: 900 });
             // 🧠 Bouton intelligent
             const smartEl = document.getElementById('smartStartContainer');
             if (smartEl) smartEl.innerHTML = renderSmartStartButton();
             // 📅 Suggestion hebdomadaire
             const weekSugEl = document.getElementById('weeklySuggestionCard');
             if (weekSugEl) weekSugEl.innerHTML = renderWeeklySuggestionCard();
+            // 📅 Activity Heatmap (GitHub-style)
+            try {
+                if (typeof renderActivityHeatmap === 'function') {
+                    renderActivityHeatmap('activityHeatmapCard', 26);
+                }
+            } catch(e) { console.warn('Heatmap render error:', e); }
             // 📊 Refresh dashboard
             updateHomeDashboard();
             // 🎯 Weekly challenge

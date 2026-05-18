@@ -1837,11 +1837,14 @@
         }
 
         .equipment-tag {
-            background: #FFF3E0;
-            color: #166534;
+            background: rgba(74,222,128,0.12);
+            color: #4ade80;
+            border: 1px solid rgba(74,222,128,0.3);
             padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 0.9em;
+            border-radius: 99px;
+            font-size: 0.85em;
+            font-weight: 700;
+            letter-spacing: 0.3px;
         }
 
         .no-results {
@@ -5263,3 +5266,335 @@ body.dark-mode [style*="border: 1px solid #ddd"],
 body.dark-mode [style*="border:1px solid #ddd"] {
     border-color: rgba(255,255,255,0.08) !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* 🎯 LEVEL 1 — MICRO-INTERACTIONS                                          */
+/* ═══════════════════════════════════════════════════════════════════════ */
+
+/* Tous les boutons obtiennent un feedback tactile cohérent */
+button,
+.btn,
+[role="button"],
+[onclick]:not(input):not(select):not(textarea) {
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.2s ease,
+                background-color 0.2s ease,
+                border-color 0.2s ease,
+                opacity 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Active state — scale down pour feedback tactile (Apple-style) */
+button:active:not(:disabled),
+.btn:active:not(:disabled),
+[role="button"]:active,
+[onclick]:active:not(input):not(select):not(textarea) {
+    transform: scale(0.96);
+    transition-duration: 0.08s;
+}
+
+/* Hover lift léger sur desktop seulement (pas mobile) */
+@media (hover: hover) and (pointer: fine) {
+    button:hover:not(:disabled),
+    .btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+    }
+}
+
+/* Ripple effect via pseudo-element */
+button.ripple::before,
+.btn-ripple::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 0; height: 0;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.4s ease-out, height 0.4s ease-out, opacity 0.4s;
+    opacity: 0;
+    pointer-events: none;
+}
+
+button.ripple:active::before,
+.btn-ripple:active::before {
+    width: 300px; height: 300px;
+    opacity: 1;
+    transition: 0s;
+}
+
+/* Désactiver scale sur inputs */
+input:active, select:active, textarea:active {
+    transform: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* 🌊 LEVEL 2 — TRANSITIONS DE PAGES                                        */
+/* ═══════════════════════════════════════════════════════════════════════ */
+
+.tab-content {
+    animation: tabFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tabFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Stagger animations pour les cartes — apparaissent en cascade */
+.tab-content .card:nth-child(1) { animation-delay: 0ms; }
+.tab-content .card:nth-child(2) { animation-delay: 60ms; }
+.tab-content .card:nth-child(3) { animation-delay: 120ms; }
+.tab-content .card:nth-child(4) { animation-delay: 180ms; }
+.tab-content .card:nth-child(5) { animation-delay: 240ms; }
+.tab-content .card:nth-child(6) { animation-delay: 300ms; }
+.tab-content .card:nth-child(7) { animation-delay: 360ms; }
+.tab-content .card:nth-child(8) { animation-delay: 420ms; }
+
+.tab-content .card {
+    animation: cardSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes cardSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Skip animation pour cartes pendant la séance — pas de re-animation */
+#exerciseView .card,
+#completionView .card {
+    animation: none !important;
+}
+
+/* Nav tab indicator avec slide */
+.nav-tab {
+    transition: color 0.25s ease, background 0.25s ease;
+    position: relative;
+}
+
+.nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 3px;
+    background: linear-gradient(90deg, #16a34a, #4ade80);
+    border-radius: 99px;
+    box-shadow: 0 0 12px rgba(74,222,128,0.6);
+    animation: navIndicatorAppear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes navIndicatorAppear {
+    0%   { width: 0; opacity: 0; }
+    100% { width: 28px; opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* 📊 LEVEL 3 — STATS / CHARTS                                              */
+/* ═══════════════════════════════════════════════════════════════════════ */
+
+/* Stats values qui apparaissent avec scale-up */
+.stat-value {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.stat-value.pulse {
+    animation: statPulse 0.6s ease;
+}
+
+@keyframes statPulse {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.15); color: #4ade80; }
+    100% { transform: scale(1); }
+}
+
+/* Progress bars qui se remplissent avec une animation */
+.progress-fill {
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: progressShimmer 2s infinite;
+}
+
+@keyframes progressShimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+
+/* Tooltip premium glassmorphism (Chart.js override) */
+.chartjs-tooltip {
+    backdrop-filter: blur(12px);
+    background: rgba(15, 23, 42, 0.85) !important;
+    border: 1px solid rgba(74,222,128,0.3) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* 🎨 LEVEL 4 — TOAST GLASSMORPHISM                                         */
+/* ═══════════════════════════════════════════════════════════════════════ */
+
+.toast {
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    background: rgba(15, 23, 42, 0.85) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.4),
+        0 0 0 1px rgba(255,255,255,0.05) inset !important;
+    color: #e2e8f0 !important;
+    border-radius: 14px !important;
+    animation: toastSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    padding: 12px 16px !important;
+    font-weight: 600 !important;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+}
+
+.toast.toast-success {
+    border-color: rgba(74,222,128,0.4) !important;
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.4),
+        0 0 0 1px rgba(74,222,128,0.1) inset,
+        0 0 24px rgba(74,222,128,0.15) !important;
+}
+
+.toast.toast-error {
+    border-color: rgba(239,68,68,0.4) !important;
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.4),
+        0 0 24px rgba(239,68,68,0.15) !important;
+}
+
+.toast.toast-info {
+    border-color: rgba(59,130,246,0.4) !important;
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.4),
+        0 0 24px rgba(59,130,246,0.15) !important;
+}
+
+@keyframes toastSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.92);
+    }
+    60% {
+        opacity: 1;
+        transform: translateY(2px) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* 📅 LEVEL 5 — HEATMAP D'ACTIVITÉ                                          */
+/* ═══════════════════════════════════════════════════════════════════════ */
+
+.activity-heatmap {
+    background: linear-gradient(160deg, #0a0e18, #0F1014);
+    border: 1px solid rgba(34,197,94,0.15);
+    border-radius: 16px;
+    padding: 18px 16px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.heatmap-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+    min-width: max-content;
+    padding: 4px 2px;
+}
+
+.heatmap-cell {
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.04);
+    transition: transform 0.15s ease, background 0.25s ease;
+    cursor: pointer;
+}
+
+.heatmap-cell:hover {
+    transform: scale(1.4);
+    z-index: 10;
+    position: relative;
+}
+
+.heatmap-cell.level-0 { background: rgba(255,255,255,0.04); }
+.heatmap-cell.level-1 { background: rgba(74,222,128,0.25); }
+.heatmap-cell.level-2 { background: rgba(74,222,128,0.5); }
+.heatmap-cell.level-3 { background: rgba(74,222,128,0.75); }
+.heatmap-cell.level-4 {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(74,222,128,0.6);
+}
+
+.heatmap-month-labels {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    margin-bottom: 4px;
+    font-size: 0.65em;
+    color: #94a3b8;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding-left: 22px;
+}
+
+.heatmap-day-labels {
+    display: grid;
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+    font-size: 0.6em;
+    color: #64748b;
+    font-weight: 600;
+    align-content: start;
+}
+
+.heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 0.7em;
+    color: #94a3b8;
+}
+
+.heatmap-legend .heatmap-cell {
+    width: 11px;
+    height: 11px;
+    cursor: default;
+}
+.heatmap-legend .heatmap-cell:hover { transform: none; }

@@ -203,7 +203,11 @@ const CHALLENGE_TYPES = [
             let maxMuscles = 0;
             history.filter(h => new Date(h.date) >= since).forEach(h => {
                 const m = h.musclesWorked || h.muscles || [];
-                if (Array.isArray(m)) maxMuscles = Math.max(maxMuscles, m.length);
+                if (Array.isArray(m)) {
+                    // Déduplication — un même muscle ne compte qu'une fois par séance
+                    const uniqueCount = new Set(m).size;
+                    maxMuscles = Math.max(maxMuscles, uniqueCount);
+                }
             });
             return maxMuscles;
         },
