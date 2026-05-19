@@ -617,11 +617,11 @@ const LEGENDARY_ISSUE_MESSAGES = [
     '🩸 CONTRAT DE SANG — Le Système t\'offre la gloire ou la ruine. À toi de choisir ce que tu mérites.',
     '💠 PROTOCOLE FINAL — Ce défi n\'arrive qu\'une fois dans une vie de chasseur. L\'éternité t\'observe.',
 ];
-function getActiveChallenge() {
+function getActiveSystemChallenge() {
     try { return JSON.parse(localStorage.getItem(CHALLENGE_STORAGE.active) || 'null'); }
     catch(e) { return null; }
 }
-function saveActiveChallenge(challenge) {
+function saveActiveSystemChallenge(challenge) {
     if (challenge) localStorage.setItem(CHALLENGE_STORAGE.active, JSON.stringify(challenge));
     else localStorage.removeItem(CHALLENGE_STORAGE.active);
 }
@@ -896,7 +896,7 @@ function applyChallengeReward(challenge) {
 function generateChallenge() {
     if (!getAdventureEnabled()) return null;
 
-    const existing = getActiveChallenge();
+    const existing = getActiveSystemChallenge();
     if (existing && !isChallengeExpired(existing)) return existing;
 
     // ── 1% de chance d'obtenir un défi légendaire ────────────────────
@@ -924,12 +924,12 @@ function generateChallenge() {
             isLegendary: true,
             rewardXP: LEGENDARY_REWARD.xpBonus,
         };
-        saveActiveChallenge(challenge);
+        saveActiveSystemChallenge(challenge);
         return challenge;
     }
 
     // ── Défi normal ──────────────────────────────────────────────────
-    const totalStats = typeof getPlayerTotalStats === 'function' ? getPlayerTotalStats() : { strength: 10 };
+    const totalStats = typeof getPlayerEquipStats === 'function' ? getPlayerEquipStats() : { strength: 10 };
     const playerPower = Object.values(totalStats).reduce((s, v) => s + v, 0);
     const difficulty = playerPower < 80 ? 'easy' : playerPower < 200 ? 'medium' : 'hard';
 
@@ -975,7 +975,7 @@ function generateChallenge() {
         isLegendary: false,
     };
 
-    saveActiveChallenge(challenge);
+    saveActiveSystemChallenge(challenge);
     return challenge;
 }
 
@@ -986,7 +986,7 @@ function isChallengeExpired(challenge) {
     return new Date(challenge.deadline) < new Date();
 }
 
-function getChallengeProgress(challenge) {
+function getSystemChallengeProgress(challenge) {
     const type = CHALLENGE_TYPES.find(t => t.id === challenge.typeId);
     if (!type) return 0;
     try { return type.check(challenge); }
@@ -994,23 +994,23 @@ function getChallengeProgress(challenge) {
 }
 
 function isChallengeCompleted(challenge) {
-    return getChallengeProgress(challenge) >= challenge.target;
+    return getSystemChallengeProgress(challenge) >= challenge.target;
 }
 
 // ── Appelé après chaque séance pour vérifier ──────────────────────────
 function checkChallengeOnWorkoutComplete() {
     if (!getAdventureEnabled()) return;
-    const challenge = getActiveChallenge();
+    const challenge = getActiveSystemChallenge();
     if (!challenge || challenge.status !== 'active') return;
 
     if (isChallengeCompleted(challenge)) {
         challenge.status = 'completed';
-        saveActiveChallenge(challenge);
+        saveActiveSystemChallenge(challenge);
 
         // ── Appliquer les récompenses ────────────────────────────────
         const reward = applyChallengeReward(challenge);
         challenge.rewardApplied = reward;
-        saveActiveChallenge(challenge);
+        saveActiveSystemChallenge(challenge);
 
         const msg = SYSTEM_SUCCESS_MESSAGES[Math.floor(Math.random() * SYSTEM_SUCCESS_MESSAGES.length)];
         setTimeout(() => showChallengeResultModal(challenge, true, msg, null, reward), 2500);
@@ -1024,7 +1024,7 @@ function checkChallengeOnWorkoutComplete() {
 
 function failChallenge(challenge) {
     challenge.status = 'failed';
-    saveActiveChallenge(challenge);
+    saveActiveSystemChallenge(challenge);
 
     let penaltyData;
     if (challenge.isLegendary) {
@@ -1045,7 +1045,7 @@ function failChallenge(challenge) {
 // ── Check au démarrage de l'app ────────────────────────────────────────
 function checkExpiredChallengeOnLoad() {
     if (!getAdventureEnabled()) return;
-    const challenge = getActiveChallenge();
+    const challenge = getActiveSystemChallenge();
     if (!challenge || challenge.status !== 'active') return;
     if (isChallengeExpired(challenge) && !isChallengeCompleted(challenge)) {
         failChallenge(challenge);
@@ -1054,7 +1054,7 @@ function checkExpiredChallengeOnLoad() {
 
 // ── Forcer un nouveau défi (pour tests) ────────────────────────────────
 function forceNewChallenge() {
-    saveActiveChallenge(null);
+    saveActiveSystemChallenge(null);
     const ch = generateChallenge();
     if (ch) {
         renderAdventureTab();
@@ -1247,7 +1247,7 @@ function renderChallengeSection() {
     if (!getAdventureEnabled()) return '';
 
     // Vérifier expiration au rendu
-    const challenge = getActiveChallenge();
+    const challenge = getActiveSystemChallenge();
     const penalties = getActivePenalties();
 
     // ── Pénalités actives ────────────────────────────────────────────
@@ -1289,7 +1289,7 @@ function renderChallengeSection() {
                 <div style="font-size:0.78em;color:#94a3b8;line-height:1.5;">Le Système t'observe…<br/>peut-être reviendra-t-il à ta prochaine séance.</div>
             </div>`;
     } else {
-        const progress = getChallengeProgress(challenge);
+        const progress = getSystemChallengeProgress(challenge);
         const pct = Math.min(100, Math.round((progress / challenge.target) * 100));
         const now = Date.now();
         const deadline = new Date(challenge.deadline);
@@ -1363,7 +1363,7 @@ let _challengeTimerInterval = null;
 function startChallengeTimer() {
     clearInterval(_challengeTimerInterval);
     _challengeTimerInterval = setInterval(() => {
-        const challenge = getActiveChallenge();
+        const challenge = getActiveSystemChallenge();
         if (!challenge || challenge.status !== 'active') {
             clearInterval(_challengeTimerInterval);
             return;
@@ -1393,7 +1393,7 @@ function initChallengeSystem() {
     if (!getAdventureEnabled()) return;
     checkExpiredChallengeOnLoad();
 
-    const challenge = getActiveChallenge();
+    const challenge = getActiveSystemChallenge();
     const noActive = !challenge || challenge.status !== 'active';
 
     if (noActive) {
@@ -1416,11 +1416,11 @@ function tryGenerateChallengeAfterWorkout() {
 
 // Affiche les détails complets du défi en cours (rouvre le modal d'émission)
 function showActiveChallengeDetails() {
-    const challenge = getActiveChallenge();
+    const challenge = getActiveSystemChallenge();
     if (!challenge || challenge.status !== 'active') return;
 
     // Calculer la progression actuelle pour l'afficher
-    const progress = getChallengeProgress(challenge);
+    const progress = getSystemChallengeProgress(challenge);
     const pct = Math.min(100, Math.round((progress / challenge.target) * 100));
     const deadline = new Date(challenge.deadline);
     const msLeft = deadline - Date.now();

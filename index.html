@@ -365,36 +365,66 @@
             <div id="activityHeatmapCard" class="activity-heatmap"></div>
 
             <!-- Fitness Index of the Day -->
-            <div class="card" id="fitnessIndexCard" style="padding:20px;">
-                <h3 style="margin-bottom:16px;color:#16a34a;">💪 Indice de forme aujourd'hui</h3>
+            <div class="card" id="fitnessIndexCard" style="padding:20px;background:linear-gradient(160deg,#0a0e18,#0F1014);border:1px solid rgba(34,197,94,0.18);position:relative;overflow:hidden;">
+                <!-- Glow accent -->
+                <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#22c55e,transparent);opacity:0.6;"></div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:8px;">
+                    <div>
+                        <div style="font-size:0.6em;color:#4ade80;font-weight:900;letter-spacing:2px;margin-bottom:3px;">◈ FORME DU JOUR</div>
+                        <h3 style="margin:0;color:white;font-size:1.05em;font-weight:900;">💪 Comment te sens-tu ?</h3>
+                    </div>
+                    <div id="fitnessAutoSuggestBadge" style="display:none;"></div>
+                </div>
 
                 <!-- Volume hebdomadaire par muscle -->
                 <div id="weeklyVolumeWidget" style="display:none;"></div>
-                <div id="weeklyMuscleVolume" style="margin-bottom:16px;"></div>
+                <div id="weeklyMuscleVolume" style="margin-bottom:14px;"></div>
 
-                <!-- Slider + score -->
-                <div style="display:flex;align-items:center;gap:16px;">
-                    <div style="flex:1;">
+                <!-- Jauge circulaire avec presets -->
+                <div style="display:flex;align-items:center;gap:18px;margin-bottom:14px;">
+                    <!-- Cercle de score -->
+                    <div style="position:relative;width:96px;height:96px;flex-shrink:0;">
+                        <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                            <!-- Background circle -->
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="7"/>
+                            <!-- Progress circle (animated via JS) -->
+                            <circle id="fitnessIndexProgressCircle" cx="50" cy="50" r="42" fill="none"
+                                    stroke="#22c55e" stroke-width="7" stroke-linecap="round"
+                                    stroke-dasharray="263.89" stroke-dashoffset="79.17"
+                                    style="transition:stroke-dashoffset 0.8s cubic-bezier(0.16,1,0.3,1),stroke 0.4s;
+                                           filter:drop-shadow(0 0 8px rgba(34,197,94,0.5));"/>
+                        </svg>
+                        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                            <div id="fitnessIndexDisplay" style="font-size:2em;font-weight:900;color:#4ade80;line-height:1;letter-spacing:-1px;">7</div>
+                            <div style="font-size:0.62em;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-top:1px;">/ 10</div>
+                        </div>
+                    </div>
+
+                    <div style="flex:1;min-width:0;">
                         <input type="range" id="fitnessIndexSlider" min="1" max="10" value="7"
-                               style="width:100%;cursor:pointer;"
+                               style="width:100%;cursor:pointer;height:6px;"
                                oninput="updateFitnessIndex(this.value)"
                                aria-label="Indice de forme du jour de 1 à 10"
                                aria-valuemin="1" aria-valuemax="10" aria-valuenow="7">
-                        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.82em;color:#94a3b8;">
-                            <span>😴 Fatigué</span>
-                            <span>😐 Moyen</span>
-                            <span>💪 En forme</span>
+                        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.7em;color:#64748b;font-weight:700;">
+                            <span>1</span><span>5</span><span>10</span>
                         </div>
-                    </div>
-                    <div style="text-align:center;min-width:52px;">
-                        <div id="fitnessIndexDisplay" style="font-size:2.8em;font-weight:900;color:#16a34a;line-height:1;">7</div>
-                        <div style="font-size:0.8em;color:#6b7280;">/&nbsp;10</div>
+                        <!-- Presets rapides -->
+                        <div style="display:flex;gap:5px;margin-top:10px;">
+                            <button onclick="setFitnessIndex(2)" class="no-ripple" style="flex:1;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:#fca5a5;border-radius:9px;padding:7px 4px;font-size:0.72em;font-weight:800;cursor:pointer;">😴 Faible</button>
+                            <button onclick="setFitnessIndex(5)" class="no-ripple" style="flex:1;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);color:#fbbf24;border-radius:9px;padding:7px 4px;font-size:0.72em;font-weight:800;cursor:pointer;">😐 Moyen</button>
+                            <button onclick="setFitnessIndex(8)" class="no-ripple" style="flex:1;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:#4ade80;border-radius:9px;padding:7px 4px;font-size:0.72em;font-weight:800;cursor:pointer;">🔥 Au top</button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Advice box -->
-                <div id="fitnessAdvice" style="margin-top:14px;padding:13px 16px;border-radius:12px;font-size:0.9em;line-height:1.5;
-                     background:rgba(22,163,74,0.12);border:1px solid rgba(22,163,74,0.25);color:#e2e8f0;">
+                <!-- Facteurs (pourquoi cet indice ?) -->
+                <div id="fitnessFactors" style="display:none;margin-bottom:12px;"></div>
+
+                <!-- Advice box améliorée -->
+                <div id="fitnessAdvice" style="padding:13px 14px;border-radius:12px;font-size:0.85em;line-height:1.5;
+                     background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);color:#e2e8f0;">
                     💡 Vous êtes en bonne forme ! Séance normale recommandée.
                 </div>
             </div>
@@ -3626,6 +3656,9 @@
             if (typeof initAdventureSystem === 'function') initAdventureSystem();
             if (typeof initChallengeSystem === 'function') initChallengeSystem();
             if (typeof startSystemRandomMessages === 'function') startSystemRandomMessages();
+
+            // 🌌 AWAKENED — Migration depuis l'XP existant (1x seulement)
+            if (typeof awakRunMigrationIfNeeded === 'function') awakRunMigrationIfNeeded();
 
             // 🎯 Activer les micro-interactions (ripple + haptic)
             if (typeof _initRippleEffect === 'function') _initRippleEffect();

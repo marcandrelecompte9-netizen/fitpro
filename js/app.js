@@ -90,11 +90,11 @@
                 const elapsed = now - startTime;
                 const t = Math.min(elapsed / duration, 1);
                 const current = start + (end - start) * ease(t);
-                el.textContent = prefix + current.toFixed(decimals) + (decimals ? '' : '').replace(/\.0+$/, '') + suffix;
+                el.textContent = prefix + current.toFixed(decimals) + suffix;
                 if (t < 1) {
                     requestAnimationFrame(tick);
                 } else {
-                    el.textContent = prefix + end.toFixed(decimals).replace(/\.0+$/, '') + suffix;
+                    el.textContent = prefix + end.toFixed(decimals) + suffix;
                     el.dataset.cuLast = end;
                 }
             }
@@ -112,7 +112,12 @@
             if (!el) return;
             const NB_WEEKS = weeks || 26; // ~6 mois
             const history = (() => {
-                try { return JSON.parse(localStorage.getItem('workoutHistory') || '[]'); } catch(e) { return []; }
+                try {
+                    // Utiliser la même source que le reste de l'app (profil ou legacy)
+                    const profileId = typeof getCurrentProfileId === 'function' ? getCurrentProfileId() : null;
+                    const key = profileId ? `profile_${profileId}_workoutHistory` : 'workoutHistory';
+                    return JSON.parse(localStorage.getItem(key) || '[]');
+                } catch(e) { return []; }
             })();
 
             // Count workouts per day (YYYY-MM-DD)
@@ -137,13 +142,10 @@
             const startDate = new Date(endOfWeek);
             startDate.setDate(endOfWeek.getDate() - totalDays + 1);
 
-            // Build cells with month labels
-            const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+            // Build cells
             const dayNames = ['L','','M','','V','','D'];
 
             let cellsHTML = '';
-            let monthLabelsHTML = '';
-            let currentMonth = -1;
 
             for (let i = 0; i < totalDays; i++) {
                 const d = new Date(startDate);
@@ -218,6 +220,16 @@
                 }
             }, true);
         }
+
+        // ── Helper: dismissOnBackdrop ─────────────────────────────────
+        // Attache un handler "click outside to close" sur un modal
+        function dismissOnBackdrop(modal) {
+            if (!modal) return;
+            modal.addEventListener('click', e => {
+                if (e.target === modal) modal.remove();
+            });
+        }
+        window.dismissOnBackdrop = dismissOnBackdrop;
 
         function showToast(message, type = 'success', duration = 3000) {
             const container = document.getElementById('toastContainer');
@@ -414,7 +426,6 @@
             if (activeChallenge) {
                 const startDate = new Date(activeChallenge.startDate);
                 const today = new Date();
-                const daysPassed = Math.floor((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
                 const daysCompleted = activeChallenge.completedDays.length;
                 const progressPercent = Math.round((daysCompleted / activeChallenge.duration) * 100);
                 const todayCompleted = activeChallenge.completedDays.includes(today.toISOString().split('T')[0]);
@@ -4051,7 +4062,7 @@
                             Données stockées localement sur ton appareil
                         </div>
                     </div>`;
-                modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+                dismissOnBackdrop(modal);
                 document.body.appendChild(modal);
             });
         }
@@ -4225,7 +4236,7 @@
                         </button>
                     </div>
                 </div>`;
-            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            dismissOnBackdrop(modal);
             document.body.appendChild(modal);
         }
 
@@ -6358,59 +6369,302 @@
 
         function saveFitnessIndex(value) {
             const profileId = getCurrentProfileId();
+            const v = parseInt(value);
             const indexData = JSON.stringify({
                 date: new Date().toDateString(),
-                value: parseInt(value)
+                value: v
             });
-            
+
             if (profileId) {
                 setProfileData(profileId, 'fitnessIndex', indexData);
             } else {
                 localStorage.setItem('fitnessIndex', indexData);
             }
+
+            // Sauvegarder dans l'historique pour analyse de tendance
+            try {
+                const trendKey = profileId ? `profile_${profileId}_fitnessIndexHistory` : 'fitnessIndexHistory';
+                const trend = JSON.parse(localStorage.getItem(trendKey) || '[]');
+                const todayKey = new Date().toISOString().slice(0,10);
+                // Remplacer l'entrée d'aujourd'hui si elle existe, sinon push
+                const idx = trend.findIndex(t => t.day === todayKey);
+                if (idx >= 0) {
+                    trend[idx].value = v;
+                } else {
+                    trend.push({ day: todayKey, value: v });
+                }
+                // Limiter à 30 jours
+                if (trend.length > 30) trend.splice(0, trend.length - 30);
+                localStorage.setItem(trendKey, JSON.stringify(trend));
+            } catch(e) {}
         }
 
         function loadFitnessIndex() {
             const value = getFitnessIndex();
-            $el('fitnessIndexSlider').value = value;
+            const slider = document.getElementById('fitnessIndexSlider');
+            if (slider) slider.value = value;
             updateFitnessIndex(value);
+            // Show auto-suggest badge if relevant
+            if (typeof renderFitnessAutoSuggestBadge === 'function') {
+                renderFitnessAutoSuggestBadge();
+            }
         }
 
         function updateFitnessIndex(value) {
             const v = parseInt(value);
-            $text('fitnessIndexDisplay', v);
+            // Animated CountUp on the display
+            const displayEl = document.getElementById('fitnessIndexDisplay');
+            if (displayEl) {
+                if (typeof countUpTo === 'function') {
+                    countUpTo(displayEl, v, { duration: 500 });
+                } else {
+                    displayEl.textContent = v;
+                }
+            }
             saveFitnessIndex(v);
 
-            // ── Gradient dynamique du slider selon la valeur ──────────
-            const pct = ((v - 1) / 9) * 100;
-            // Couleur de remplissage : rouge→ambre→vert selon valeur
+            // ── Couleur dynamique (rouge → ambre → vert) ──────────────
             const fillColor = v <= 3 ? '#ef4444' : v <= 6 ? '#f59e0b' : '#22c55e';
-            const slider = $el('fitnessIndexSlider');
-            if (slider) {
-                slider.style.background =
-                    `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${pct}%, rgba(255,255,255,0.15) ${pct}%, rgba(255,255,255,0.15) 100%)`;
+            const fillColorRgba = v <= 3 ? 'rgba(239,68,68,0.5)' : v <= 6 ? 'rgba(245,158,11,0.5)' : 'rgba(34,197,94,0.5)';
+
+            // ── Jauge circulaire ──────────────────────────────────────
+            const circle = document.getElementById('fitnessIndexProgressCircle');
+            if (circle) {
+                const radius = 42;
+                const circumference = 2 * Math.PI * radius; // ≈ 263.89
+                const offset = circumference - (v / 10) * circumference;
+                circle.setAttribute('stroke-dashoffset', offset);
+                circle.setAttribute('stroke', fillColor);
+                circle.style.filter = `drop-shadow(0 0 10px ${fillColorRgba})`;
             }
 
-            // ── Couleur du chiffre ────────────────────────────────────
-            const display = document.getElementById('fitnessIndexDisplay');
-            if (display) display.style.color = fillColor;
+            // ── Couleur du chiffre central ────────────────────────────
+            if (displayEl) displayEl.style.color = fillColor;
 
-            // ── Boîte de conseil — dark-mode safe ────────────────────
-            const advice = $el('fitnessAdvice');
+            // ── Slider gradient ───────────────────────────────────────
+            const slider = document.getElementById('fitnessIndexSlider');
+            if (slider) {
+                const pct = ((v - 1) / 9) * 100;
+                slider.style.background =
+                    `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${pct}%, rgba(255,255,255,0.08) ${pct}%, rgba(255,255,255,0.08) 100%)`;
+            }
+
+            // ── Boîte de conseil détaillée ────────────────────────────
+            const advice = document.getElementById('fitnessAdvice');
             if (!advice) return;
 
-            const configs = {
-                low:  { bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.3)',   icon: '😴', text: 'Vous semblez fatigué. Privilégiez une séance légère de récupération ou des étirements.' },
-                mid:  { bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.3)',  icon: '😐', text: 'Forme moyenne. Une séance modérée est recommandée.' },
-                good: { bg: 'rgba(22,163,74,0.12)',   border: 'rgba(22,163,74,0.25)',  icon: '💪', text: 'Vous êtes en bonne forme ! Séance normale recommandée.' },
-                top:  { bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)',   icon: '🔥', text: "Excellent ! C'est le moment de pousser un peu plus fort !" }
+            const adviceConfigs = {
+                low: {
+                    bg: 'rgba(239,68,68,0.08)',
+                    border: 'rgba(239,68,68,0.3)',
+                    icon: '😴',
+                    title: 'Tu sembles fatigué',
+                    text: 'Privilégie une séance légère ou repos actif.',
+                    recommendations: [
+                        '🧘 Stretching / mobilité 15-20 min',
+                        '🚶 Marche tranquille 20-30 min',
+                        '💤 Repos complet (recommandé si fatigue extrême)'
+                    ]
+                },
+                mid: {
+                    bg: 'rgba(245,158,11,0.08)',
+                    border: 'rgba(245,158,11,0.3)',
+                    icon: '😐',
+                    title: 'Forme moyenne',
+                    text: 'Séance modérée recommandée — ne force pas.',
+                    recommendations: [
+                        '💪 Séance courte 30-40 min',
+                        '⚖️ Charges habituelles, pas de PR',
+                        '🏃 Cardio léger ou modéré'
+                    ]
+                },
+                good: {
+                    bg: 'rgba(34,197,94,0.08)',
+                    border: 'rgba(34,197,94,0.3)',
+                    icon: '💪',
+                    title: 'En bonne forme',
+                    text: 'Séance normale, pousse-toi normalement.',
+                    recommendations: [
+                        '🎯 Séance complète 45-60 min',
+                        '📈 Progression normale (RPE 7-8)',
+                        '🔥 Tu peux tester un nouveau record sur 1 exo'
+                    ]
+                },
+                top: {
+                    bg: 'rgba(34,197,94,0.1)',
+                    border: 'rgba(34,197,94,0.4)',
+                    icon: '🔥',
+                    title: 'Au top de ta forme !',
+                    text: "C'est le moment idéal pour pousser plus fort !",
+                    recommendations: [
+                        '🚀 Séance intensive 60-75 min',
+                        '🏆 Vise un nouveau PR aujourd\'hui',
+                        '💥 RPE 8-9, charges au max contrôlé'
+                    ]
+                }
             };
-            const cfg = v <= 3 ? configs.low : v <= 5 ? configs.mid : v <= 7 ? configs.good : configs.top;
+
+            const cfg = v <= 3 ? adviceConfigs.low :
+                        v <= 5 ? adviceConfigs.mid :
+                        v <= 7 ? adviceConfigs.good : adviceConfigs.top;
+
             advice.style.background = cfg.bg;
-            advice.style.border     = `1px solid ${cfg.border}`;
-            advice.style.color      = '#e2e8f0';
-            advice.innerHTML        = `${cfg.icon} ${cfg.text}`;
+            advice.style.border = `1px solid ${cfg.border}`;
+            advice.innerHTML = `
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <div style="font-size:1.5em;flex-shrink:0;line-height:1;">${cfg.icon}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:900;color:white;margin-bottom:3px;font-size:0.95em;">${cfg.title}</div>
+                        <div style="color:#cbd5e1;font-size:0.85em;line-height:1.4;margin-bottom:8px;">${cfg.text}</div>
+                        <div style="display:flex;flex-direction:column;gap:4px;">
+                            ${cfg.recommendations.map(r => `<div style="font-size:0.78em;color:#94a3b8;line-height:1.4;">${r}</div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // ── Mettre à jour les facteurs explicatifs ────────────────
+            renderFitnessFactors(v);
         }
+
+        /**
+         * Calcule un indice de forme suggéré basé sur l'historique
+         * (récupération, intensité récente, streak)
+         */
+        function calculateSuggestedFitness() {
+            const history = getWorkoutHistory();
+            const now = Date.now();
+            const dayMs = 24 * 60 * 60 * 1000;
+
+            // Facteur 1 : Repos depuis la dernière séance
+            let restFactor = 0;
+            if (history.length > 0) {
+                try {
+                    const lastDate = new Date(history[0].date);
+                    const hoursSince = (now - lastDate.getTime()) / (60 * 60 * 1000);
+                    if (hoursSince < 12)      restFactor = -2;
+                    else if (hoursSince < 24) restFactor = -1;
+                    else if (hoursSince < 48) restFactor = 0;
+                    else if (hoursSince < 96) restFactor = 1;
+                    else                       restFactor = 0; // Plus de 4 jours = peut signaler une perte de routine
+                } catch(e) {}
+            }
+
+            // Facteur 2 : Intensité des 7 derniers jours
+            const last7 = history.filter(w => {
+                try { return (now - new Date(w.date).getTime()) < 7 * dayMs; } catch(e) { return false; }
+            });
+            let intensityFactor = 0;
+            if (last7.length >= 5)      intensityFactor = -1; // Possible surcharge
+            else if (last7.length >= 3) intensityFactor = 0;
+            else                         intensityFactor = 1;
+
+            // Facteur 3 : Tendance récente du fitness index
+            let trendFactor = 0;
+            try {
+                const trendKey = getCurrentProfileId() ? `profile_${getCurrentProfileId()}_fitnessIndexHistory` : 'fitnessIndexHistory';
+                const trend = JSON.parse(localStorage.getItem(trendKey) || '[]');
+                if (trend.length >= 3) {
+                    const recent = trend.slice(-3);
+                    const avg = recent.reduce((s, t) => s + (t.value || 0), 0) / recent.length;
+                    if (avg >= 7) trendFactor = 1;
+                    else if (avg <= 4) trendFactor = -1;
+                }
+            } catch(e) {}
+
+            // Score de base 6 + facteurs (clamped 1-10)
+            const score = Math.max(1, Math.min(10, 6 + restFactor + intensityFactor + trendFactor));
+
+            return {
+                score,
+                factors: {
+                    rest: { value: restFactor, label: restFactor > 0 ? 'Bien reposé' : restFactor < 0 ? 'Repos insuffisant' : 'Repos OK' },
+                    intensity: { value: intensityFactor, label: last7.length >= 5 ? 'Charge élevée' : last7.length >= 3 ? 'Activité régulière' : 'Activité faible' },
+                    trend: { value: trendFactor, label: trendFactor > 0 ? 'Tendance positive' : trendFactor < 0 ? 'Tendance basse' : 'Tendance stable' }
+                },
+                weeklyCount: last7.length
+            };
+        }
+
+        function renderFitnessFactors(currentValue) {
+            const el = document.getElementById('fitnessFactors');
+            if (!el) return;
+            const sugg = calculateSuggestedFitness();
+            const diff = currentValue - sugg.score;
+
+            // Si la valeur de l'utilisateur diffère significativement de la suggestion, montrer
+            // les facteurs explicatifs
+            const showFactors = Math.abs(diff) >= 2 || currentValue <= 4 || currentValue >= 8;
+            if (!showFactors) {
+                el.style.display = 'none';
+                return;
+            }
+
+            const factorIcon = (val) => val > 0 ? '↑' : val < 0 ? '↓' : '·';
+            const factorColor = (val) => val > 0 ? '#4ade80' : val < 0 ? '#f87171' : '#94a3b8';
+
+            el.style.display = 'block';
+            el.innerHTML = `
+                <div style="font-size:0.6em;color:#94a3b8;font-weight:800;letter-spacing:1.5px;margin-bottom:7px;">◈ FACTEURS</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:8px 6px;text-align:center;">
+                        <div style="font-size:1em;color:${factorColor(sugg.factors.rest.value)};font-weight:900;line-height:1;">${factorIcon(sugg.factors.rest.value)}</div>
+                        <div style="font-size:0.62em;color:#cbd5e1;font-weight:700;margin-top:4px;letter-spacing:0.3px;">${sugg.factors.rest.label}</div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:8px 6px;text-align:center;">
+                        <div style="font-size:1em;color:${factorColor(sugg.factors.intensity.value)};font-weight:900;line-height:1;">${factorIcon(sugg.factors.intensity.value)}</div>
+                        <div style="font-size:0.62em;color:#cbd5e1;font-weight:700;margin-top:4px;letter-spacing:0.3px;">${sugg.factors.intensity.label}</div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:8px 6px;text-align:center;">
+                        <div style="font-size:1em;color:${factorColor(sugg.factors.trend.value)};font-weight:900;line-height:1;">${factorIcon(sugg.factors.trend.value)}</div>
+                        <div style="font-size:0.62em;color:#cbd5e1;font-weight:700;margin-top:4px;letter-spacing:0.3px;">${sugg.factors.trend.label}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderFitnessAutoSuggestBadge() {
+            const el = document.getElementById('fitnessAutoSuggestBadge');
+            if (!el) return;
+            const current = getFitnessIndex();
+            const sugg = calculateSuggestedFitness();
+            // Si l'utilisateur n'a pas mis à jour aujourd'hui ET diff >= 2
+            const todayKey = new Date().toISOString().slice(0,10);
+            const lastUpdate = localStorage.getItem('fitnessIndexLastUpdate');
+            const updatedToday = lastUpdate === todayKey;
+
+            if (!updatedToday && Math.abs(current - sugg.score) >= 2) {
+                el.style.display = 'inline-block';
+                el.innerHTML = `
+                    <button onclick="setFitnessIndex(${sugg.score})" class="no-ripple"
+                            style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.35);
+                                   color:#c084fc;border-radius:9px;padding:5px 10px;
+                                   font-size:0.7em;font-weight:800;cursor:pointer;
+                                   display:flex;align-items:center;gap:5px;letter-spacing:0.3px;">
+                        ✨ Suggérer ${sugg.score}
+                    </button>
+                `;
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function setFitnessIndex(value) {
+            const slider = document.getElementById('fitnessIndexSlider');
+            if (slider) {
+                slider.value = value;
+                slider.setAttribute('aria-valuenow', value);
+            }
+            updateFitnessIndex(value);
+            // Save today's update flag
+            const todayKey = new Date().toISOString().slice(0,10);
+            localStorage.setItem('fitnessIndexLastUpdate', todayKey);
+            const badge = document.getElementById('fitnessAutoSuggestBadge');
+            if (badge) badge.style.display = 'none';
+            // Haptic feedback
+            if (typeof hapticTap === 'function') hapticTap(20);
+        }
+        window.setFitnessIndex = setFitnessIndex;
 
         function calculateFatigueLevel() {
             const history = getWorkoutHistory();
@@ -7439,7 +7693,6 @@
             `;
             
             const modal = document.getElementById('durationModal');
-            const modalContent = modal.querySelector('.modal-content');
             const modalHeader = modal.querySelector('.modal-header h2');
             const modalBody = modal.querySelector('p');
             
@@ -12391,7 +12644,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                         `).join('')}
                     </div>
                 </div>`;
-            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            dismissOnBackdrop(modal);
             document.body.appendChild(modal);
         }
 
@@ -12437,7 +12690,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                         </button>
                     </div>
                 </div>`;
-            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            dismissOnBackdrop(modal);
             document.body.appendChild(modal);
         }
 
@@ -12511,7 +12764,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                         `).join('')}
                     </div>
                 </div>`;
-            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            dismissOnBackdrop(modal);
             document.body.appendChild(modal);
         }
 
@@ -12549,7 +12802,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                         </button>
                     </div>
                 </div>`;
-            modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+            dismissOnBackdrop(modal);
             document.body.appendChild(modal);
         }
 
@@ -13840,9 +14093,7 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 }
                 return msg;
             });
-            
-            const fullMessage = `🎉 NOUVEAU RECORD ! 🎉\n\n${prMessages.join('\n')}\n\nExercice: ${prs[0].exercise}`;
-            
+
             // Visual notification
             showToast(`🏆 ${prs.length} PR${prs.length > 1 ? 's' : ''} battu${prs.length > 1 ? 's' : ''} !`, 'success', 4000);
             
@@ -19395,7 +19646,6 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             const gym  = document.getElementById('modeGymBtn');
             const gymSection = document.getElementById('gymProgramsSection');
             const active   = 'linear-gradient(135deg,#16a34a,#15803d)';
-            const inactiveStyle = 'background:#f9fafb;border-color:#e5e7eb;';
 
             [home, gym].forEach(btn => {
                 if (!btn) return;
@@ -20104,32 +20354,6 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             }
         }
 
-        // (legacy kept for safety)
-        function _exportSessionSummaryOld() {
-            if (!currentWorkout) return;
-            const lines = [`🏋️ ${currentWorkout.name}`, `📅 ${new Date().toLocaleDateString('fr-FR')}`, ''];
-            currentWorkout.exercises.forEach(ex => {
-                if (ex.isRest || ex.isInfo) return;
-                const name = ex._baseName || ex.name;
-                const sets = _currentSessionSets[name];
-                if (sets && sets.length > 0) {
-                    const setsStr = sets.filter(s=>!s.isWarmup).map(s=>`${s.reps}×${s.weight||'BW'}${useKg?'kg':'lbs'}`).join(' / ');
-                    lines.push(`• ${name}: ${setsStr}`);
-                } else {
-                    lines.push(`• ${name}`);
-                }
-            });
-            const totalMin = Math.round((Date.now() - (workoutStartTime||Date.now())) / 60000);
-            lines.push('', `⏱ ${totalMin} min · 🔥 ~${Math.round(totalMin*8)} kcal`);
-            const text = lines.join('\n');
-            if (navigator.share) {
-                navigator.share({ title: currentWorkout.name, text }).catch(()=>{});
-            } else if (navigator.clipboard) {
-                navigator.clipboard.writeText(text).then(()=>showToast('📋 Résumé copié !','success',2500));
-            } else {
-                showAlert(text.replace(/\n/g,'<br>'), 'info', 'Résumé de séance');
-            }
-        }
 
         async function shareWorkout(workout, stats) {
             const text = generateWorkoutSummaryText(workout, stats);
@@ -20829,78 +21053,6 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
         // 🎮 SYSTÈMES AVANCÉS — Boss, Classe, Compétences, Prestige, Exploits
         // ══════════════════════════════════════════════════════════════
 
-        // ── BOSS DE LA SEMAINE ────────────────────────────────────────
-        const WEEKLY_BOSSES = [
-            { id:'chest_guardian',  name:'Gardien Pectoral',  emoji:'🛡️', muscles:['Pectoraux','Épaules','Triceps'],    hp:1000, reward:{xp:500, badge:'boss_chest'}  },
-            { id:'iron_back',       name:'Dos de Fer',        emoji:'⚔️', muscles:['Dos','Biceps','Trapèzes'],           hp:1000, reward:{xp:500, badge:'boss_back'}   },
-            { id:'leg_titan',       name:'Titan des Jambes',  emoji:'🦵', muscles:['Quadriceps','Ischio-jambiers','Fessiers','Mollets'], hp:1200, reward:{xp:600, badge:'boss_legs'}  },
-            { id:'core_demon',      name:'Démon du Core',     emoji:'🔥', muscles:['Abdominaux','Obliques'],             hp:800,  reward:{xp:400, badge:'boss_core'}   },
-            { id:'full_destroyer',  name:'Destructeur Total', emoji:'💀', muscles:['Pectoraux','Dos','Quadriceps','Épaules','Abdominaux'], hp:2000, reward:{xp:1000, badge:'boss_full'} },
-        ];
-
-        function rpgGetWeeklyBoss() {
-            const weekNum = Math.floor(Date.now() / (7*24*3600*1000));
-            return WEEKLY_BOSSES[weekNum % WEEKLY_BOSSES.length];
-        }
-
-        function rpgGetBossState() {
-            const boss = rpgGetWeeklyBoss();
-            const weekKey = 'rpgBoss_' + Math.floor(Date.now()/(7*24*3600*1000));
-            try {
-                const saved = JSON.parse(localStorage.getItem(weekKey) || 'null');
-                if (saved) return { boss, dmgDealt: saved.dmgDealt||0, defeated: saved.defeated||false };
-            } catch(e) {}
-            return { boss, dmgDealt: 0, defeated: false };
-        }
-
-        function rpgDamageBoss(musclesTrained) {
-            if (!rpgEnabled()) return;
-            const state = rpgGetBossState();
-            if (state.defeated) return;
-            const weekKey = 'rpgBoss_' + Math.floor(Date.now()/(7*24*3600*1000));
-            // Dégâts = nb muscles communs × 80
-            const matchingMuscles = (musclesTrained||[]).filter(m => state.boss.muscles.includes(m));
-            if (matchingMuscles.length === 0) return;
-            const dmg = matchingMuscles.length * 80;
-            const newDmg = Math.min(state.dmgDealt + dmg, state.boss.hp);
-            const defeated = newDmg >= state.boss.hp;
-            localStorage.setItem(weekKey, JSON.stringify({ dmgDealt: newDmg, defeated }));
-            if (defeated && !state.defeated) {
-                setTimeout(() => rpgBossDefeated(state.boss), 1500);
-            } else if (dmg > 0) {
-                setTimeout(() => showToast(`⚔️ ${state.boss.name} : ${dmg} dégâts ! (${newDmg}/${state.boss.hp} PV)`, 'info', 2500), 800);
-            }
-        }
-
-        function rpgBossDefeated(boss) {
-            const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;inset:0;z-index:30003;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);';
-            overlay.innerHTML = `
-                <div style="background:linear-gradient(160deg,#450a0a,#7f1d1d,#991b1b);border:2px solid #ef4444;border-radius:24px;
-                            padding:36px 28px;max-width:320px;width:90%;text-align:center;
-                            box-shadow:0 0 60px #ef444488;animation:slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);">
-                    <div style="font-size:0.75em;letter-spacing:3px;color:#fca5a5;font-weight:800;text-transform:uppercase;margin-bottom:12px;">BOSS VAINCU !</div>
-                    <div style="font-size:4em;margin:8px 0;animation:pulse-warning 1s infinite;">${boss.emoji}</div>
-                    <div style="font-size:1.6em;font-weight:900;color:white;margin:8px 0;">${boss.name}</div>
-                    <div style="font-size:0.88em;color:rgba(255,255,255,0.6);margin-bottom:16px;">+${boss.reward.xp} XP de récompense !</div>
-                    <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:14px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;border-radius:12px;font-weight:800;cursor:pointer;font-size:1em;">
-                        🏆 Réclamer la récompense
-                    </button>
-                </div>`;
-            document.body.appendChild(overlay);
-            launchConfetti(); vibrate([200,100,200,100,400,100,600]);
-            // Accorder XP
-            const data = rpgLoad();
-            const muscles = Object.keys(data.muscles);
-            if (muscles.length > 0) {
-                const per = Math.floor(boss.reward.xp / muscles.length);
-                muscles.forEach(m => { data.muscles[m].xp = (data.muscles[m].xp||0) + per; });
-                rpgSave(data);
-            }
-            const badges = JSON.parse(localStorage.getItem('fitproLootBadges')||'[]');
-            if (!badges.includes(boss.reward.badge)) { badges.push(boss.reward.badge); localStorage.setItem('fitproLootBadges', JSON.stringify(badges)); }
-        }
-
         // ── CLASSE DE PERSONNAGE ─────────────────────────────────────
         const RPG_CLASSES = [
             {
@@ -21441,6 +21593,545 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             _refreshStatPointsCard();
             showToast('Points de stats réinitialisés.','info',2000);
         }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🌌 AWAKENED CORE — Auto-distribution + Power Score + Rangs E→S
+        // ═══════════════════════════════════════════════════════════════
+        //
+        // Architecture :
+        // - Auto-stats : gain passif selon le type d'exercice (en plus des points manuels)
+        // - Power Score : score global unique (niveau + stats + équipement + compagnons)
+        // - Rangs E→S : palier de progression basé sur Power Score
+        //
+
+        const AWAKENED_AUTO_STATS_KEY = 'awakAutoStats';
+        const AWAKENED_LAST_PROCESSED_KEY = 'awakLastProcessedWorkout';
+
+        // Auto-stats accumulées passivement (en plus des points manuels)
+        function awakAutoStatsLoad() {
+            try {
+                return JSON.parse(localStorage.getItem(AWAKENED_AUTO_STATS_KEY) || 'null')
+                    || { STR:0, AGI:0, VIT:0, END:0, PER:0, SEN:0 };
+            } catch(e) {
+                return { STR:0, AGI:0, VIT:0, END:0, PER:0, SEN:0 };
+            }
+        }
+
+        function awakAutoStatsSave(stats) {
+            localStorage.setItem(AWAKENED_AUTO_STATS_KEY, JSON.stringify(stats));
+        }
+
+        /**
+         * Classifier un exercice → gains de stats automatiques par série
+         * Chaque série complétée donne 1 point dans la stat principale,
+         * +0.3 dans une stat secondaire (selon le type d'exo)
+         */
+        function awakClassifyExerciseStats(exercise) {
+            if (!exercise) return null;
+            const name = (exercise._baseName || exercise.name || '').toLowerCase();
+            const muscle = (exercise.muscle || '').toLowerCase();
+            const type = (exercise.type || '').toLowerCase();
+
+            // Mots-clés → mapping vers stat principale + secondaire
+            // STR : exercices lourds (squat, deadlift, bench, presse)
+            if (/(squat|deadlift|soulevé|bench|press|développé|hip thrust|leg press|barre|haltère lourd)/.test(name)
+                && !/cardio|burpee|jump/.test(name)) {
+                return { main: 'STR', mainGain: 1, secondary: 'END', secGain: 0.3 };
+            }
+            // AGI : explosivité (box jump, plyo, sprint court)
+            if (/(box jump|jump|plyo|saut|burpee|sprint|kettlebell swing|clean|snatch)/.test(name)) {
+                return { main: 'AGI', mainGain: 1, secondary: 'VIT', secGain: 0.4 };
+            }
+            // VIT : circuits / HIIT / mouvements rapides
+            if (/(circuit|hiit|tabata|mountain climber|jumping jack|high knee)/.test(name)
+                || type === 'cardio' && /interval|fartlek/.test(name)) {
+                return { main: 'VIT', mainGain: 1, secondary: 'AGI', secGain: 0.3 };
+            }
+            // END : cardio long / endurance / longues séries
+            if (/(course|cardio|running|cycling|natation|swim|rope|corde à sauter|rower|rameur|elliptic)/.test(name)
+                || type === 'cardio') {
+                return { main: 'END', mainGain: 1, secondary: 'VIT', secGain: 0.2 };
+            }
+            // SEN : mobilité / étirements / yoga / méditation
+            if (/(étirement|stretch|yoga|mobilité|mobility|méditation|breathing|respiration)/.test(name)
+                || type === 'stretch' || type === 'mobility') {
+                return { main: 'SEN', mainGain: 1, secondary: 'PER', secGain: 0.3 };
+            }
+            // PER : technique / équilibre / isolation
+            if (/(planche|plank|équilibre|balance|stability|single|unilatéral|pistol|turkish|pallof)/.test(name)) {
+                return { main: 'PER', mainGain: 1, secondary: 'SEN', secGain: 0.3 };
+            }
+            // Pull / Curl / Row → STR principalement, PER secondaire (contrôle)
+            if (/(pull|tirage|rowing|curl|extension|row)/.test(name)) {
+                return { main: 'STR', mainGain: 0.7, secondary: 'PER', secGain: 0.4 };
+            }
+            // Default : équilibré sur STR/END
+            return { main: 'STR', mainGain: 0.5, secondary: 'END', secGain: 0.3 };
+        }
+
+        /**
+         * Traite les séries d'une séance terminée → distribue les points auto
+         * Appelé une fois après completeWorkout()
+         */
+        function awakProcessWorkoutForAutoStats(workout) {
+            if (!workout || !workout.exercises) return;
+
+            const lastProcessedId = localStorage.getItem(AWAKENED_LAST_PROCESSED_KEY);
+            // Identifiant unique de la séance (timestamp + nb exercices)
+            const workoutId = (workoutStartTime || Date.now()) + '_' + workout.exercises.length;
+            if (lastProcessedId === workoutId) return; // Déjà traité
+
+            const stats = awakAutoStatsLoad();
+            let totalGained = 0;
+            const gainedByStat = { STR:0, AGI:0, VIT:0, END:0, PER:0, SEN:0 };
+
+            workout.exercises.forEach(ex => {
+                if (ex.isRest || ex.isInfo) return;
+                const classification = awakClassifyExerciseStats(ex);
+                if (!classification) return;
+                // 1 série effectuée = gains complets
+                const sets = ex.sets || 1;
+                gainedByStat[classification.main] += classification.mainGain * sets;
+                if (classification.secondary) {
+                    gainedByStat[classification.secondary] += classification.secGain * sets;
+                }
+            });
+
+            // Appliquer les gains (arrondis pour éviter les fractions)
+            for (const stat of ['STR','AGI','VIT','END','PER','SEN']) {
+                const gain = Math.round(gainedByStat[stat]);
+                stats[stat] = (stats[stat] || 0) + gain;
+                totalGained += gain;
+            }
+
+            awakAutoStatsSave(stats);
+            localStorage.setItem(AWAKENED_LAST_PROCESSED_KEY, workoutId);
+
+            return { gainedByStat, totalGained };
+        }
+        window.awakProcessWorkoutForAutoStats = awakProcessWorkoutForAutoStats;
+        window.awakAutoStatsLoad = awakAutoStatsLoad;
+
+        /**
+         * Calcule les stats TOTALES du joueur (auto + manuelles + équipement + classe)
+         * C'est la fonction de référence — getPlayerEquipStats() est étendue
+         */
+        function awakGetTotalStats() {
+            // Base humaine
+            const base = { STR:10, AGI:10, VIT:10, END:10, PER:5, SEN:5 };
+
+            // Auto-stats accumulées
+            const auto = awakAutoStatsLoad();
+
+            // Points manuels alloués
+            const manual = statPointsGetAllocated();
+
+            // Stats d'équipement + sets + classe (déjà géré par getPlayerEquipStats)
+            const equip = typeof getPlayerEquipStats === 'function' ? getPlayerEquipStats() : {};
+
+            const total = {};
+            for (const stat of ['STR','AGI','VIT','END','PER','SEN']) {
+                total[stat] = (base[stat] || 0)
+                            + (auto[stat] || 0)
+                            + (manual[stat] || 0)
+                            + (equip[stat] || 0);
+            }
+            return total;
+        }
+        window.awakGetTotalStats = awakGetTotalStats;
+
+        /**
+         * POWER SCORE — Score global unique du joueur
+         * Formule : niveau×50 + somme(stats) + équipement_rareté + bonus_compagnons
+         */
+        function awakGetPowerScore() {
+            const data = typeof rpgLoad === 'function' ? rpgLoad() : { xp: 0 };
+            const level = typeof rpgGetLevel === 'function' ? rpgGetLevel(data.xp || 0) : 1;
+            const stats = awakGetTotalStats();
+
+            // 1. Bonus niveau (50 par niveau)
+            let score = level * 50;
+
+            // 2. Somme totale des stats
+            const statSum = Object.values(stats).reduce((s, v) => s + v, 0);
+            score += statSum * 3; // ×3 pour qu'un point de stat compte
+
+            // 3. Bonus rareté équipement
+            try {
+                if (typeof getEquippedItems === 'function') {
+                    const equipped = getEquippedItems();
+                    const rarityBonus = { common: 5, uncommon: 15, rare: 35, epic: 70, legendary: 150 };
+                    for (const item of Object.values(equipped)) {
+                        if (item && item.rarity) {
+                            score += rarityBonus[item.rarity] || 0;
+                        }
+                    }
+                }
+            } catch(e) {}
+
+            // 4. Bonus de set actifs
+            try {
+                if (typeof getSetBonuses === 'function') {
+                    const sets = getSetBonuses();
+                    score += sets.length * 100;
+                }
+            } catch(e) {}
+
+            // 5. Compagnons actifs (Phase 4 — pour l'instant 0)
+            // TODO Phase 4 : score += awakGetActiveCompanionsBonus();
+
+            return Math.round(score);
+        }
+        window.awakGetPowerScore = awakGetPowerScore;
+
+        /**
+         * RANG E → S basé sur Power Score
+         * Plus simple que les 9 rangs Solo Leveling, plus thématique
+         */
+        const AWAKENED_RANKS = [
+            { id: 'E', name: 'Rang E', threshold:    0, color: '#94a3b8', emoji: '◦',  desc: 'Anomalie détectée' },
+            { id: 'D', name: 'Rang D', threshold:  500, color: '#10b981', emoji: '◆',  desc: 'Premier seuil' },
+            { id: 'C', name: 'Rang C', threshold: 1200, color: '#3b82f6', emoji: '◆◆', desc: 'Stable' },
+            { id: 'B', name: 'Rang B', threshold: 2200, color: '#a855f7', emoji: '◇◇◆', desc: 'Confirmé' },
+            { id: 'A', name: 'Rang A', threshold: 3800, color: '#f59e0b', emoji: '✦✦✦', desc: 'Élite' },
+            { id: 'S', name: 'Rang S', threshold: 6500, color: '#ef4444', emoji: '✦S✦', desc: 'Exception cosmique' }
+        ];
+
+        function awakGetRank() {
+            const power = awakGetPowerScore();
+            // Trouver le rang le plus élevé atteint
+            let current = AWAKENED_RANKS[0];
+            for (const rank of AWAKENED_RANKS) {
+                if (power >= rank.threshold) current = rank;
+            }
+            return current;
+        }
+        window.awakGetRank = awakGetRank;
+
+        function awakGetNextRank() {
+            const power = awakGetPowerScore();
+            for (const rank of AWAKENED_RANKS) {
+                if (power < rank.threshold) return rank;
+            }
+            return null; // Rang max atteint
+        }
+        window.awakGetNextRank = awakGetNextRank;
+
+        function awakGetRankProgress() {
+            const power = awakGetPowerScore();
+            const current = awakGetRank();
+            const next = awakGetNextRank();
+            if (!next) return { percent: 100, current, next: null, power };
+            const range = next.threshold - current.threshold;
+            const progress = power - current.threshold;
+            return {
+                percent: Math.min(100, Math.max(0, Math.round((progress / range) * 100))),
+                current,
+                next,
+                power,
+                pointsNeeded: Math.max(0, next.threshold - power)
+            };
+        }
+        window.awakGetRankProgress = awakGetRankProgress;
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🎙️ VOIX DU SYSTÈME — Messages narratifs
+        // ═══════════════════════════════════════════════════════════════
+
+        const AWAKENED_SYSTEM_FIRST_CONTACT_KEY = 'awakFirstContactDone';
+
+        const AWAKENED_MESSAGES = {
+            firstContact: [
+                `*Quelque chose vient de te trouver.*`,
+                ``,
+                `⚙ **SYSTÈME**`,
+                `*Je te cherchais.*`,
+                `*Non.*`,
+                `*Ce n'est pas exact.*`,
+                ``,
+                `*Je cherchais quelqu'un comme toi. Une anomalie.*`,
+                `*Quelqu'un qui peut tenir.*`,
+                ``,
+                `*Tu vas comprendre. Avec le temps.*`,
+                `*Pour l'instant, fais ce que tu sais faire.*`,
+                `*Entraîne-toi.*`
+            ],
+            rankUp: {
+                D: [`⚙ **SYSTÈME**`, `*Tu changes.*`, `*De plus en plus loin de ce que tu étais.*`, `*Tant mieux.*`],
+                C: [`⚙ **SYSTÈME**`, `*Tu deviens stable.*`, `*Plus difficile à effacer.*`],
+                B: [`⚙ **SYSTÈME**`, `*Tu es au-delà de ce que la plupart atteignent.*`, `*Continue.*`],
+                A: [`⚙ **SYSTÈME**`, `*Élite.*`, `*Tu n'es plus seulement humain.*`],
+                S: [`⚙ **SYSTÈME**`, `*...*`, `*Tu ne devrais pas être là.*`, `*Et pourtant tu es là.*`, `*Bien.*`]
+            },
+            levelUp: [
+                `⚙ **SYSTÈME**`,
+                `*Tu te renforces.*`
+            ]
+        };
+
+        function awakHasMetSystem() {
+            return localStorage.getItem(AWAKENED_SYSTEM_FIRST_CONTACT_KEY) === 'true';
+        }
+
+        function awakMarkSystemMet() {
+            localStorage.setItem(AWAKENED_SYSTEM_FIRST_CONTACT_KEY, 'true');
+        }
+
+        /**
+         * Affiche un message du Système en plein écran (cinématique)
+         * Auto-skip avec un tap, glitch optionnel
+         */
+        function awakShowSystemMessage(lines, opts) {
+            opts = opts || {};
+            const overlay = document.createElement('div');
+            overlay.id = 'awakSystemOverlay';
+            overlay.style.cssText = `
+                position: fixed; inset: 0; z-index: 99999;
+                background: rgba(0,0,0,0.92);
+                backdrop-filter: blur(8px);
+                display: flex; align-items: center; justify-content: center;
+                padding: 20px;
+                font-family: 'Courier New', monospace;
+                cursor: pointer;
+                opacity: 0;
+                animation: awakFadeIn 0.6s forwards;
+            `;
+            const inner = document.createElement('div');
+            inner.style.cssText = `
+                max-width: 540px;
+                color: #4ade80;
+                font-size: 1.05em;
+                line-height: 1.8;
+                white-space: pre-wrap;
+                text-shadow: 0 0 12px rgba(74,222,128,0.4);
+            `;
+            // Render lines progressively
+            const fullText = lines.join('\n').replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#22c55e;letter-spacing:2px;">$1</strong>')
+                                              .replace(/\*([^*]+)\*/g, '<em style="color:#94a3b8;font-style:italic;">$1</em>');
+            inner.innerHTML = fullText;
+
+            const tapHint = document.createElement('div');
+            tapHint.style.cssText = `
+                position: absolute; bottom: 30px; left: 0; right: 0;
+                text-align: center; font-size: 0.75em;
+                color: #475569; letter-spacing: 2px;
+                animation: awakBlink 2s infinite;
+            `;
+            tapHint.textContent = '— tape pour continuer —';
+
+            overlay.appendChild(inner);
+            overlay.appendChild(tapHint);
+
+            // Style animations
+            if (!document.getElementById('awakSystemStyles')) {
+                const styles = document.createElement('style');
+                styles.id = 'awakSystemStyles';
+                styles.textContent = `
+                    @keyframes awakFadeIn { from{opacity:0} to{opacity:1} }
+                    @keyframes awakFadeOut { from{opacity:1} to{opacity:0} }
+                    @keyframes awakBlink { 50% { opacity: 0.3; } }
+                `;
+                document.head.appendChild(styles);
+            }
+
+            const close = () => {
+                overlay.style.animation = 'awakFadeOut 0.4s forwards';
+                setTimeout(() => overlay.remove(), 400);
+                if (opts.onClose) opts.onClose();
+            };
+            overlay.addEventListener('click', close);
+
+            document.body.appendChild(overlay);
+            // Haptic on appearance
+            if (typeof hapticTap === 'function') hapticTap([30, 50, 80]);
+        }
+        window.awakShowSystemMessage = awakShowSystemMessage;
+
+        /**
+         * Première rencontre avec le Système — déclenchée à la fin de la 1ère séance après update
+         * Doit être appelée APRÈS completeWorkout()
+         */
+        function awakTriggerFirstContactIfNeeded() {
+            if (awakHasMetSystem()) return false;
+            // Délai pour ne pas chevaucher l'écran de complétion
+            setTimeout(() => {
+                awakShowSystemMessage(AWAKENED_MESSAGES.firstContact, {
+                    onClose: () => awakMarkSystemMet()
+                });
+            }, 2500);
+            return true;
+        }
+        window.awakTriggerFirstContactIfNeeded = awakTriggerFirstContactIfNeeded;
+
+        /**
+         * Vérifier si un rank-up vient d'avoir lieu, et afficher le message du Système
+         */
+        function awakCheckRankUp() {
+            const currentRank = awakGetRank();
+            const lastRankSeen = localStorage.getItem('awakLastRankSeen') || 'E';
+            if (currentRank.id !== lastRankSeen) {
+                // Vérifier que c'est une montée (pas descente)
+                const idxNew = AWAKENED_RANKS.findIndex(r => r.id === currentRank.id);
+                const idxOld = AWAKENED_RANKS.findIndex(r => r.id === lastRankSeen);
+                if (idxNew > idxOld) {
+                    // Rank UP !
+                    const messages = AWAKENED_MESSAGES.rankUp[currentRank.id];
+                    if (messages) {
+                        setTimeout(() => awakShowSystemMessage(messages), 1500);
+                    }
+                }
+                localStorage.setItem('awakLastRankSeen', currentRank.id);
+            }
+        }
+        window.awakCheckRankUp = awakCheckRankUp;
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🔄 MIGRATION : Initialiser les auto-stats depuis l'historique existant
+        // ═══════════════════════════════════════════════════════════════
+        // Pour les utilisateurs existants : leur Power Score doit refléter
+        // leur progression accumulée. On parcourt leur workoutHistory une fois.
+        function awakRunMigrationIfNeeded() {
+            const MIGRATION_KEY = 'awakMigrationV1Done';
+            if (localStorage.getItem(MIGRATION_KEY) === 'true') return;
+
+            try {
+                // Récupérer l'historique du profil actif
+                const profileId = typeof getCurrentProfileId === 'function' ? getCurrentProfileId() : null;
+                const histKey = profileId ? `profile_${profileId}_workoutHistory` : 'workoutHistory';
+                const history = JSON.parse(localStorage.getItem(histKey) || '[]');
+
+                if (history.length === 0) {
+                    // Pas d'historique → migration trivialement terminée
+                    localStorage.setItem(MIGRATION_KEY, 'true');
+                    return;
+                }
+
+                // Estimer les stats accumulées
+                // On ne peut pas reclassifier exactement, mais on peut donner un boost
+                // proportionnel au volume d'activité passée
+                const stats = awakAutoStatsLoad();
+                const totalWorkouts = history.length;
+
+                // Distribuer 5 points par séance sur les stats principales
+                // Réparti selon les muscles travaillés
+                let totalPoints = totalWorkouts * 5;
+
+                // Compter les muscles travaillés cumulatifs
+                const muscleCount = { STR: 0, AGI: 0, END: 0, VIT: 0, PER: 0, SEN: 0 };
+                history.forEach(w => {
+                    const muscles = w.musclesWorked || w.muscles || [];
+                    muscles.forEach(m => {
+                        const ml = m.toLowerCase();
+                        if (/pectoraux|dos|jambes|bras|biceps|triceps|épaules/.test(ml)) muscleCount.STR++;
+                        else if (/cardio|endurance/.test(ml)) muscleCount.END++;
+                        else if (/abdominaux|core/.test(ml)) muscleCount.PER++;
+                        else if (/flexibilité|récupération/.test(ml)) muscleCount.SEN++;
+                        else muscleCount.STR += 0.5;
+                    });
+                });
+
+                const totalMuscleHits = Object.values(muscleCount).reduce((s, v) => s + v, 0);
+                if (totalMuscleHits > 0) {
+                    for (const stat of Object.keys(muscleCount)) {
+                        const ratio = muscleCount[stat] / totalMuscleHits;
+                        stats[stat] = (stats[stat] || 0) + Math.round(totalPoints * ratio);
+                    }
+                } else {
+                    // Fallback : distribution équilibrée
+                    const each = Math.round(totalPoints / 6);
+                    for (const stat of ['STR','AGI','VIT','END','PER','SEN']) {
+                        stats[stat] = (stats[stat] || 0) + each;
+                    }
+                }
+
+                awakAutoStatsSave(stats);
+                localStorage.setItem(MIGRATION_KEY, 'true');
+                // Initialiser le rang sans déclencher le rankUp pop
+                const currentRank = awakGetRank();
+                localStorage.setItem('awakLastRankSeen', currentRank.id);
+
+                console.log(`🌌 Awakened migration: ${totalWorkouts} séances → +${totalPoints} stats distribués (Rang ${currentRank.id})`);
+            } catch(e) {
+                console.warn('Awakened migration failed:', e);
+                // Marquer comme fait quand même pour ne pas retenter en boucle
+                localStorage.setItem('awakMigrationV1Done', 'true');
+            }
+        }
+        window.awakRunMigrationIfNeeded = awakRunMigrationIfNeeded;
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🎨 RENDER : Carte Power Score + Rang dans l'onglet Jeu
+        // ═══════════════════════════════════════════════════════════════
+        function renderAwakenedPowerCard() {
+            const progress = awakGetRankProgress();
+            const stats = awakGetTotalStats();
+            const rank = progress.current;
+            const next = progress.next;
+
+            const statRows = [
+                { key: 'STR', icon: '⚔️', color: '#ef4444', label: 'Force' },
+                { key: 'AGI', icon: '⚡', color: '#f59e0b', label: 'Agilité' },
+                { key: 'VIT', icon: '💨', color: '#3b82f6', label: 'Vitesse' },
+                { key: 'END', icon: '💚', color: '#22c55e', label: 'Endurance' },
+                { key: 'PER', icon: '👁️', color: '#06b6d4', label: 'Perception' },
+                { key: 'SEN', icon: '🌀', color: '#a855f7', label: 'Sensorialité' }
+            ];
+
+            return `
+            <div class="card" style="background:linear-gradient(160deg,#0a0e18,#0F1014);border:1px solid ${rank.color}40;padding:20px;margin-bottom:14px;position:relative;overflow:hidden;">
+                <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,${rank.color},transparent);opacity:0.6;"></div>
+
+                <!-- Header : Rang + Power Score -->
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:0.6em;color:${rank.color};font-weight:900;letter-spacing:2px;margin-bottom:3px;">◈ AWAKENED ANCRAGE</div>
+                        <div style="display:flex;align-items:baseline;gap:10px;">
+                            <span style="font-size:2em;font-weight:900;color:${rank.color};line-height:1;letter-spacing:1px;text-shadow:0 0 12px ${rank.color}60;">${rank.id}</span>
+                            <span style="font-size:0.78em;color:#94a3b8;font-weight:700;">${rank.desc}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.58em;color:#64748b;font-weight:700;letter-spacing:1.5px;">POWER SCORE</div>
+                        <div style="font-size:1.5em;font-weight:900;color:white;letter-spacing:-1px;line-height:1.1;" id="awakPowerScoreDisplay">${progress.power.toLocaleString('fr-FR')}</div>
+                    </div>
+                </div>
+
+                <!-- Barre de progression vers prochain rang -->
+                ${next ? `
+                    <div style="margin-bottom:18px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:0.7em;font-weight:700;">
+                            <span style="color:${rank.color};">${rank.id}</span>
+                            <span style="color:#94a3b8;">${progress.pointsNeeded} pts vers ${next.id}</span>
+                            <span style="color:${next.color};">${next.id}</span>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.05);height:8px;border-radius:99px;overflow:hidden;border:1px solid rgba(255,255,255,0.05);">
+                            <div style="width:${progress.percent}%;height:100%;background:linear-gradient(90deg,${rank.color},${next.color});box-shadow:0 0 8px ${rank.color}60;transition:width 0.8s cubic-bezier(0.16,1,0.3,1);"></div>
+                        </div>
+                    </div>
+                ` : `
+                    <div style="margin-bottom:18px;text-align:center;padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:11px;">
+                        <div style="font-size:0.7em;color:#fca5a5;font-weight:800;letter-spacing:1px;">◇ RANG MAXIMUM ATTEINT ◇</div>
+                    </div>
+                `}
+
+                <!-- Stats détaillées (collapsibles) -->
+                <div>
+                    <div style="font-size:0.62em;color:#94a3b8;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">◈ ATTRIBUTS</div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+                        ${statRows.map(s => `
+                            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:8px 6px;text-align:center;">
+                                <div style="font-size:1em;line-height:1;margin-bottom:3px;">${s.icon}</div>
+                                <div style="font-size:0.62em;color:#64748b;font-weight:700;letter-spacing:0.5px;">${s.key}</div>
+                                <div style="font-size:0.95em;font-weight:900;color:${s.color};line-height:1.2;">${stats[s.key] || 0}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>`;
+        }
+        window.renderAwakenedPowerCard = renderAwakenedPowerCard;
+
+
 
         function _refreshStatPointsCard() {
             const oldCard = document.getElementById('statPointsCard');
@@ -22315,9 +23006,30 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
             
             // Save to history
             saveWorkoutToHistory(currentWorkout, (Date.now() - workoutStartTime) / 1000);
-            
+
             // NOUVEAU : Sauvegarder muscles travaillés pour tracking récupération
             saveMusclesWorked(currentWorkout);
+
+            // 🌌 AWAKENED — Distribution auto des stats selon les exercices effectués
+            try {
+                if (typeof awakProcessWorkoutForAutoStats === 'function') {
+                    awakProcessWorkoutForAutoStats(currentWorkout);
+                }
+            } catch(e) { console.warn('Awakened auto-stats error:', e); }
+
+            // 🌌 AWAKENED — Premier contact avec le Système (1ère séance)
+            try {
+                if (typeof awakTriggerFirstContactIfNeeded === 'function') {
+                    awakTriggerFirstContactIfNeeded();
+                }
+            } catch(e) {}
+
+            // 🌌 AWAKENED — Détection de montée de rang
+            try {
+                if (typeof awakCheckRankUp === 'function') {
+                    awakCheckRankUp();
+                }
+            } catch(e) {}
 
             // ⚔️ Tentative de drop d'équipement (mode aventure)
             try {
@@ -22599,14 +23311,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 ],
                 exercises: [
                     { name:'Développé couché barre',      sets:5, reps:10, mode:'reps', rest:120, note:'Prise large' },
-                    { name:'Développé incliné haltères',  sets:4, reps:12, mode:'reps', rest:90 },
+                    { name:'Incline Bench Press',  sets:4, reps:12, mode:'reps', rest:90 },
                     { name:'Squat barre haut',             sets:5, reps:8,  mode:'reps', rest:180, note:'Profond, dos droit' },
                     { name:'Soulevé de terre',             sets:4, reps:6,  mode:'reps', rest:180 },
                     { name:'Tractions pronation',          sets:4, reps:8,  mode:'reps', rest:90 },
                     { name:'Développé militaire haltères', sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Rowing barre',                 sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Curl biceps haltères',         sets:3, reps:12, mode:'reps', rest:60 },
-                    { name:'Extension triceps haltère',    sets:3, reps:12, mode:'reps', rest:60 },
+                    { name:'Extensions nuque haltère',    sets:3, reps:12, mode:'reps', rest:60 },
                     { name:'Leg Press',                    sets:4, reps:15, mode:'reps', rest:90 },
                 ]
             },
@@ -22636,9 +23348,9 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { name:'Tractions pronation',          sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Squat barre haut',             sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Développé militaire haltères', sets:4, reps:10, mode:'reps', rest:90 },
-                    { name:'Rowing haltère',               sets:4, reps:10, mode:'reps', rest:90 },
+                    { name:'Rowing haltère un bras',               sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Burpees',                      sets:4, reps:10, mode:'reps', rest:60 },
-                    { name:'Gainage planche',              sets:3, duration:60, mode:'timer', rest:45 },
+                    { name:'Planche',              sets:3, duration:60, mode:'timer', rest:45 },
                     { name:'Hip thrust barre',             sets:3, reps:12, mode:'reps', rest:90 },
                 ]
             },
@@ -22701,11 +23413,11 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 ],
                 exercises: [
                     { name:'Développé couché barre',       sets:4, reps:10, mode:'reps', rest:90, note:'Tempo 3-1-1' },
-                    { name:'Développé incliné haltères',   sets:4, reps:12, mode:'reps', rest:75 },
-                    { name:'Écarté haltères couché',       sets:3, reps:15, mode:'reps', rest:60 },
+                    { name:'Incline Bench Press',   sets:4, reps:12, mode:'reps', rest:75 },
+                    { name:'Écarté couché haltères',       sets:3, reps:15, mode:'reps', rest:60 },
                     { name:'Développé militaire haltères', sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Tractions supination',         sets:4, reps:10, mode:'reps', rest:90 },
-                    { name:'Rowing haltère',               sets:4, reps:12, mode:'reps', rest:75 },
+                    { name:'Rowing haltère un bras',               sets:4, reps:12, mode:'reps', rest:75 },
                     { name:'Squat barre haut',             sets:4, reps:10, mode:'reps', rest:120 },
                     { name:'Leg Press',                    sets:4, reps:15, mode:'reps', rest:90 },
                     { name:'Hip thrust barre',             sets:4, reps:12, mode:'reps', rest:90 },
@@ -22742,8 +23454,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { name:'Squat barre haut',              sets:4, reps:12, mode:'reps', rest:90 },
                     { name:'Hip thrust barre',              sets:4, reps:15, mode:'reps', rest:75 },
                     { name:'Développé militaire haltères',  sets:3, reps:12, mode:'reps', rest:75 },
-                    { name:'Fentes avant',                  sets:3, reps:12, mode:'reps', rest:60 },
-                    { name:'Gainage planche',               sets:3, duration:45, mode:'timer', rest:30 },
+                    { name:'Fentes marchées',                  sets:3, reps:12, mode:'reps', rest:60 },
+                    { name:'Planche',               sets:3, duration:45, mode:'timer', rest:30 },
                     { name:'Burpees',                       sets:3, reps:10, mode:'reps', rest:60 },
                 ]
             },
@@ -22770,14 +23482,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { emoji:'😴', text:'Sommeil 9h — sa priorité absolue pour peau et forme' },
                 ],
                 exercises: [
-                    { name:'Gainage planche',              sets:3, duration:40, mode:'timer', rest:30 },
-                    { name:'Crunch',                       sets:3, reps:20, mode:'reps', rest:30 },
-                    { name:'Fentes avant',                 sets:3, reps:15, mode:'reps', rest:45 },
+                    { name:'Planche',              sets:3, duration:40, mode:'timer', rest:30 },
+                    { name:'Crunch classique',                       sets:3, reps:20, mode:'reps', rest:30 },
+                    { name:'Fentes marchées',                 sets:3, reps:15, mode:'reps', rest:45 },
                     { name:'Hip thrust barre',             sets:4, reps:15, mode:'reps', rest:60 },
                     { name:'Squat barre haut',             sets:3, reps:15, mode:'reps', rest:60 },
-                    { name:'Pompes',                       sets:3, reps:12, mode:'reps', rest:45 },
-                    { name:'Abdominaux',                   sets:3, reps:20, mode:'reps', rest:30 },
-                    { name:'Étirements dynamiques',        sets:1, duration:300, mode:'timer', rest:0 },
+                    { name:'Pompes classiques',                       sets:3, reps:12, mode:'reps', rest:45 },
+                    { name:'Crunch classique',                   sets:3, reps:20, mode:'reps', rest:30 },
+                    { name:'Cercles de bras',        sets:1, duration:300, mode:'timer', rest:0 },
                 ]
             },
             {
@@ -22805,12 +23517,12 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 exercises: [
                     { name:'Hip thrust barre',             sets:4, reps:15, mode:'reps', rest:60 },
                     { name:'Squat barre haut',             sets:4, reps:12, mode:'reps', rest:75 },
-                    { name:'Fentes avant',                 sets:3, reps:15, mode:'reps', rest:45 },
-                    { name:'Crunch',                       sets:4, reps:25, mode:'reps', rest:30 },
-                    { name:'Gainage planche',              sets:3, duration:45, mode:'timer', rest:30 },
+                    { name:'Fentes marchées',                 sets:3, reps:15, mode:'reps', rest:45 },
+                    { name:'Crunch classique',                       sets:4, reps:25, mode:'reps', rest:30 },
+                    { name:'Planche',              sets:3, duration:45, mode:'timer', rest:30 },
                     { name:'Burpees',                      sets:4, reps:12, mode:'reps', rest:60 },
                     { name:'Développé couché haltères',    sets:3, reps:15, mode:'reps', rest:60 },
-                    { name:'Corde à sauter',               sets:5, duration:60, mode:'timer', rest:30 },
+                    { name:'Jump Rope Basic',               sets:5, duration:60, mode:'timer', rest:30 },
                 ]
             },
             {
@@ -22841,9 +23553,9 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { name:'Hip thrust barre',             sets:4, reps:12, mode:'reps', rest:90 },
                     { name:'Développé militaire haltères', sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Tractions pronation',          sets:4, reps:8,  mode:'reps', rest:90 },
-                    { name:'Fentes avant',                 sets:3, reps:12, mode:'reps', rest:60 },
+                    { name:'Fentes marchées',                 sets:3, reps:12, mode:'reps', rest:60 },
                     { name:'Burpees',                      sets:4, reps:12, mode:'reps', rest:60 },
-                    { name:'Gainage planche',              sets:3, duration:60, mode:'timer', rest:45 },
+                    { name:'Planche',              sets:3, duration:60, mode:'timer', rest:45 },
                 ]
             },
 
@@ -22877,8 +23589,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { name:'Développé couché barre',       sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Tractions pronation',          sets:4, reps:10, mode:'reps', rest:90 },
                     { name:'Hip thrust barre',             sets:4, reps:15, mode:'reps', rest:75 },
-                    { name:'Gainage planche',              sets:3, duration:60, mode:'timer', rest:30 },
-                    { name:'Abdominaux',                   sets:4, reps:30, mode:'reps', rest:30 },
+                    { name:'Planche',              sets:3, duration:60, mode:'timer', rest:30 },
+                    { name:'Crunch classique',                   sets:4, reps:30, mode:'reps', rest:30 },
                 ]
             },
             {
@@ -22904,13 +23616,13 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { emoji:'🥊', text:'Focus défense et footwork — le cardio suit naturellement' },
                 ],
                 exercises: [
-                    { name:'Corde à sauter',               sets:6, duration:180, mode:'timer', rest:30 },
+                    { name:'Jump Rope Basic',               sets:6, duration:180, mode:'timer', rest:30 },
                     { name:'Burpees',                      sets:5, reps:15, mode:'reps', rest:45 },
-                    { name:'Crunch',                       sets:5, reps:50, mode:'reps', rest:30 },
-                    { name:'Gainage planche',              sets:4, duration:60, mode:'timer', rest:20 },
-                    { name:'Abdominaux',                   sets:5, reps:40, mode:'reps', rest:30 },
+                    { name:'Crunch classique',                       sets:5, reps:50, mode:'reps', rest:30 },
+                    { name:'Planche',              sets:4, duration:60, mode:'timer', rest:20 },
+                    { name:'Crunch classique',                   sets:5, reps:40, mode:'reps', rest:30 },
                     { name:'Développé couché haltères',    sets:3, reps:15, mode:'reps', rest:60 },
-                    { name:'Rowing haltère',               sets:3, reps:15, mode:'reps', rest:60 },
+                    { name:'Rowing haltère un bras',               sets:3, reps:15, mode:'reps', rest:60 },
                     { name:'Développé militaire haltères', sets:3, reps:12, mode:'reps', rest:60 },
                 ]
             },
@@ -22940,11 +23652,11 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { name:'Développé militaire haltères', sets:5, reps:10, mode:'reps', rest:90 },
                     { name:'Rowing barre',                 sets:5, reps:10, mode:'reps', rest:90 },
                     { name:'Tractions pronation',          sets:4, reps:12, mode:'reps', rest:75 },
-                    { name:'Gainage planche',              sets:4, duration:90, mode:'timer', rest:30 },
-                    { name:'Rotation russe',               sets:4, reps:25, mode:'reps', rest:30 },
+                    { name:'Planche',              sets:4, duration:90, mode:'timer', rest:30 },
+                    { name:'Russian twist',               sets:4, reps:25, mode:'reps', rest:30 },
                     { name:'Hip thrust barre',             sets:4, reps:15, mode:'reps', rest:60 },
-                    { name:'Fentes avant',                 sets:4, reps:15, mode:'reps', rest:60 },
-                    { name:'Écarté haltères couché',       sets:3, reps:15, mode:'reps', rest:60 },
+                    { name:'Fentes marchées',                 sets:4, reps:15, mode:'reps', rest:60 },
+                    { name:'Écarté couché haltères',       sets:3, reps:15, mode:'reps', rest:60 },
                 ]
             },
             {
@@ -23005,14 +23717,14 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { emoji:'💧', text:'Eau infusée au citron le matin avant tout' },
                 ],
                 exercises: [
-                    { name:'Crunch',                       sets:4, reps:30, mode:'reps', rest:30 },
-                    { name:'Gainage planche',              sets:4, duration:45, mode:'timer', rest:20 },
-                    { name:'Fentes avant',                 sets:3, reps:20, mode:'reps', rest:45 },
+                    { name:'Crunch classique',                       sets:4, reps:30, mode:'reps', rest:30 },
+                    { name:'Planche',              sets:4, duration:45, mode:'timer', rest:20 },
+                    { name:'Fentes marchées',                 sets:3, reps:20, mode:'reps', rest:45 },
                     { name:'Squat barre haut',             sets:3, reps:20, mode:'reps', rest:60 },
                     { name:'Hip thrust barre',             sets:4, reps:20, mode:'reps', rest:45 },
                     { name:'Burpees',                      sets:3, reps:10, mode:'reps', rest:45 },
-                    { name:'Abdominaux',                   sets:3, reps:25, mode:'reps', rest:30 },
-                    { name:'Corde à sauter',               sets:3, duration:120, mode:'timer', rest:30 },
+                    { name:'Crunch classique',                   sets:3, reps:25, mode:'reps', rest:30 },
+                    { name:'Jump Rope Basic',               sets:3, duration:120, mode:'timer', rest:30 },
                 ]
             },
             {
@@ -23038,13 +23750,13 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { emoji:'🚫', text:'Zéro alcool, café ou sucre raffiné — stricte depuis 30 ans' },
                 ],
                 exercises: [
-                    { name:'Gainage planche',              sets:4, duration:60, mode:'timer', rest:30 },
-                    { name:'Pompes',                       sets:4, reps:20, mode:'reps', rest:45 },
+                    { name:'Planche',              sets:4, duration:60, mode:'timer', rest:30 },
+                    { name:'Pompes classiques',                       sets:4, reps:20, mode:'reps', rest:45 },
                     { name:'Curl biceps haltères',         sets:4, reps:15, mode:'reps', rest:45 },
-                    { name:'Extension triceps haltère',    sets:4, reps:15, mode:'reps', rest:45 },
+                    { name:'Extensions nuque haltère',    sets:4, reps:15, mode:'reps', rest:45 },
                     { name:'Développé militaire haltères', sets:3, reps:15, mode:'reps', rest:60 },
-                    { name:'Fentes avant',                 sets:4, reps:20, mode:'reps', rest:45 },
-                    { name:'Crunch',                       sets:4, reps:30, mode:'reps', rest:30 },
+                    { name:'Fentes marchées',                 sets:4, reps:20, mode:'reps', rest:45 },
+                    { name:'Crunch classique',                       sets:4, reps:30, mode:'reps', rest:30 },
                     { name:'Burpees',                      sets:3, reps:10, mode:'reps', rest:60 },
                 ]
             },
@@ -23077,8 +23789,8 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                     { name:'Développé couché haltères',    sets:4, reps:12, mode:'reps', rest:75 },
                     { name:'Tractions supination',         sets:3, reps:10, mode:'reps', rest:90 },
                     { name:'Burpees',                      sets:4, reps:12, mode:'reps', rest:60 },
-                    { name:'Gainage planche',              sets:3, duration:60, mode:'timer', rest:30 },
-                    { name:'Fentes avant',                 sets:3, reps:15, mode:'reps', rest:60 },
+                    { name:'Planche',              sets:3, duration:60, mode:'timer', rest:30 },
+                    { name:'Fentes marchées',                 sets:3, reps:15, mode:'reps', rest:60 },
                 ]
             },
             {
@@ -23105,13 +23817,13 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
                 ],
                 exercises: [
                     { name:'Squat barre haut',             sets:4, reps:10, mode:'reps', rest:90 },
-                    { name:'Fentes avant',                 sets:4, reps:15, mode:'reps', rest:60 },
+                    { name:'Fentes marchées',                 sets:4, reps:15, mode:'reps', rest:60 },
                     { name:'Hip thrust barre',             sets:4, reps:12, mode:'reps', rest:75 },
                     { name:'Développé militaire haltères', sets:3, reps:12, mode:'reps', rest:75 },
                     { name:'Tractions supination',         sets:3, reps:10, mode:'reps', rest:90 },
-                    { name:'Gainage planche',              sets:4, duration:45, mode:'timer', rest:30 },
+                    { name:'Planche',              sets:4, duration:45, mode:'timer', rest:30 },
                     { name:'Burpees',                      sets:4, reps:12, mode:'reps', rest:60 },
-                    { name:'Rowing haltère',               sets:3, reps:12, mode:'reps', rest:60 },
+                    { name:'Rowing haltère un bras',               sets:3, reps:12, mode:'reps', rest:60 },
                 ]
             },
 
@@ -23532,7 +24244,10 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
         };
 
         function getActiveCelebrity() {
-            const id = localStorage.getItem(CELEBRITY_ACTIVE_KEY);
+            const profileId = typeof getCurrentProfileId === 'function' ? getCurrentProfileId() : null;
+            const key = profileId ? `${CELEBRITY_ACTIVE_KEY}_${profileId}` : CELEBRITY_ACTIVE_KEY;
+            // Lire la nouvelle clé par profil, fallback sur l'ancienne pour migration
+            const id = localStorage.getItem(key) || (profileId ? localStorage.getItem(CELEBRITY_ACTIVE_KEY) : null);
             return id ? CELEBRITY_PROGRAMS.find(p => p.id === id) || null : null;
         }
 
@@ -23600,13 +24315,15 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
         }
 
         function setActiveCelebrity(programId) {
+            const profileId = typeof getCurrentProfileId === 'function' ? getCurrentProfileId() : null;
+            const key = profileId ? `${CELEBRITY_ACTIVE_KEY}_${profileId}` : CELEBRITY_ACTIVE_KEY;
             if (programId) {
-                localStorage.setItem(CELEBRITY_ACTIVE_KEY, programId);
+                localStorage.setItem(key, programId);
                 if (!localStorage.getItem(CELEBRITY_START_KEY + '_' + programId)) {
                     localStorage.setItem(CELEBRITY_START_KEY + '_' + programId, new Date().toISOString());
                 }
             } else {
-                localStorage.removeItem(CELEBRITY_ACTIVE_KEY);
+                localStorage.removeItem(key);
             }
             if (typeof updateProfileDisplay === 'function') updateProfileDisplay();
             if (typeof updateHomeStats      === 'function') updateHomeStats();
@@ -23620,11 +24337,15 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
 
             // Mapper les splits de la personnalité sur les 7 jours
             const plan = dayNames.map((dayName, i) => {
+                const dayPrefix = dayName.toLowerCase().slice(0, 3); // 'lun', 'mar', ...
                 // Trouver le split correspondant à ce jour
                 const split = program.splits.find(s => {
                     const d = s.day.toLowerCase();
-                    return d === dayName.toLowerCase().slice(0, 3)
-                        || d.startsWith(dayName.toLowerCase().slice(0, 3));
+                    // Gérer les formats combinés style 'Sam/Dim'
+                    if (d.includes('/')) {
+                        return d.split('/').some(part => part.trim().startsWith(dayPrefix));
+                    }
+                    return d === dayPrefix || d.startsWith(dayPrefix);
                 });
 
                 if (!split || split.name.includes('Repos') || split.name.includes('🛌') || split.name.includes('repos')) {
@@ -23657,15 +24378,34 @@ showConfirm('⚠️ RÉINITIALISATION TOTALE — Supprimer TOUTES les données d
         function _musclesFromSplitName(name) {
             const n = name.toLowerCase();
             const map = [
-                [['poitrine','pectoraux','chest','push','bench'],       ['Pectoraux']],
-                [['dos','back','pull','dorsaux'],                        ['Dos']],
-                [['épaules','shoulder','militaire'],                     ['Épaules']],
-                [['bras','biceps','triceps','curl','dips'],              ['Biceps','Triceps']],
-                [['jambes','quadriceps','squat','lower','deadlift','dl'],['Quadriceps','Ischio-jambiers','Fessiers']],
-                [['fessiers','glutes','hip'],                            ['Fessiers']],
-                [['abdos','core','planche'],                             ['Abdominaux']],
-                [['cardio','hiit','tabata'],                             ['Cardio']],
-                [['corps entier','full body','fonctionnel'],             ['Pectoraux','Dos','Quadriceps','Épaules']],
+                // Push / poitrine
+                [['poitrine','pectoraux','chest','push','bench','développé'],  ['Pectoraux','Triceps','Épaules']],
+                // Pull / dos
+                [['dos','back','pull','dorsaux','rowing','traction','tirage'], ['Dos','Biceps']],
+                // Épaules pures
+                [['épaules','shoulder','militaire','deltoïd'],                  ['Épaules']],
+                // Bras
+                [['bras','arms','biceps','triceps','curl','dips'],              ['Biceps','Triceps']],
+                // Haut du corps complet
+                [['haut du corps','upper body','upper'],                        ['Pectoraux','Dos','Épaules','Biceps','Triceps']],
+                // Jambes / inférieur
+                [['jambes','legs','lower','quadriceps','squat','deadlift','dl','soulevé'], ['Quadriceps','Ischio-jambiers','Fessiers','Mollets']],
+                // Fessiers spécifique
+                [['fessiers','glutes','hip','booty'],                           ['Fessiers']],
+                // Abdos / core
+                [['abdos','core','planche','obliques','rotation','gainage'],    ['Abdominaux']],
+                // Cardio
+                [['cardio','hiit','tabata','sprint','course','run','danse','dance','zumba'], ['Cardio']],
+                // Combat / agilité / boxe
+                [['combat','boxe','box','sparring','frappe','combinaison','agilité','agility','footwork'], ['Cardio','Épaules','Abdominaux']],
+                // Yoga / mobilité / stretching
+                [['yoga','étirement','stretch','mobilité','mobility','flexibilité','méditation'], ['Flexibilité']],
+                // Force / explosivité (sans spécification)
+                [['force','strength','puissance','power','explosif'],           ['Pectoraux','Dos','Quadriceps']],
+                // Corps entier
+                [['corps entier','full body','fonctionnel','total body','complet'], ['Pectoraux','Dos','Quadriceps','Épaules','Abdominaux']],
+                // Récup active
+                [['récup','recovery','récupération','marche','natation','swim'], ['Récupération']],
             ];
             const muscles = [];
             for (const [keys, mList] of map) {

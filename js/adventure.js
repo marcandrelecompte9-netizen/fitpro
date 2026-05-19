@@ -681,8 +681,11 @@ function renderAdventureTab() {
     const container = document.getElementById('adventureContainer');
     if (!container) return;
     if (!getAdventureEnabled()) { container.innerHTML = renderAdventureDisabled(); return; }
-    // Équipement et inventaire accessibles via le modal (bouton en haut)
-    container.innerHTML = renderHunterCard()
+    // 🌌 AWAKENED Power Card en haut (Power Score + Rang E→S)
+    const awakenedCard = (typeof window.renderAwakenedPowerCard === 'function')
+        ? window.renderAwakenedPowerCard() : '';
+    container.innerHTML = awakenedCard
+        + renderHunterCard()
         + (typeof renderChallengeSection==='function' ? renderChallengeSection() : '');
     if (typeof startChallengeTimer==='function') startChallengeTimer();
 }

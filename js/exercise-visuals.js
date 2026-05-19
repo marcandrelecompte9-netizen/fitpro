@@ -739,7 +739,6 @@ var EXERCISE_IMAGES = {
   'Burpees':                       'images/exercises/Burpees.webp',
   'Burpees légers':                'images/exercises/Burpees_légers.webp',
   'Cable Crossover':               'images/exercises/Cable_Crossover.webp',
-  'Cable crossover':               'images/exercises/Cable_Crossover.webp',
 };
 
 function hasExerciseImage(name) {
@@ -809,7 +808,7 @@ function toImgHTML(src, name) {
 }
 
 // ── MAIN DISPATCHER — couvre les 436 exercices ───────────────────────
-function getExerciseVisual(name, muscle, phase) {
+function _legacyGetExerciseVisual(name, muscle, phase) {
   // ── Vrai image si disponible ──────────────────────────────────────
   if (name && EXERCISE_IMAGES[name]) {
     return toImgHTML(EXERCISE_IMAGES[name], name);
@@ -912,7 +911,7 @@ function getExerciseVisual(name, muscle, phase) {
   return generic_muscle(muscle, phase);
 }
 
-window.getExerciseVisual  = getExerciseVisual;
+window._legacyGetExerciseVisual = _legacyGetExerciseVisual;
 window.hasExerciseImage   = hasExerciseImage;
 window.EXERCISE_IMAGES    = EXERCISE_IMAGES;
 window.buildLazyImg       = _buildLazyImg;
